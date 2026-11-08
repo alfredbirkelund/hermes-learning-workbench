@@ -3,7 +3,7 @@
   "label": "Learning Workbench",
   "description": "Backend routes for the Learning Workbench Desktop pane.",
   "icon": "BookOpen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "tab": { "hidden": true },
   "api": "plugin_api.py"
 }
