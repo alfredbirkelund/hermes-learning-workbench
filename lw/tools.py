@@ -86,11 +86,13 @@ PROPOSE_PLAN = {
 PROPOSE_EXERCISE = {
     "name": "learning_workbench_propose_exercise",
     "description": (
-        "Pose ONE exercise in the learner's Workbench pane. The learner answers there in their own words; never "
-        "answer for them. reference_answer, rubric and hints are frozen now, before any answer, and stay hidden "
-        "until the learner takes a hint or reveals the solution. Only one exercise can be open; if one is waiting, "
-        "this is refused. After a successful call, end your turn with one short sentence pointing to the pane. "
-        "The pane shows plain text: write math in Unicode (x², √, →, ∫), not LaTeX."),
+        "Pose ONE exercise in the learner's Workbench pane. For kind='check', teach the step in `lesson`: the "
+        "explanation the learner reads right above the question (required for a step's first check; teach the idea, "
+        "do not solve this exercise). The learner answers in their own words; never answer for them. "
+        "reference_answer, rubric and hints are frozen now, before any answer, and stay hidden until the learner "
+        "takes a hint or reveals the solution. Only one exercise can be open; if one is waiting, this is refused. "
+        "After a successful call, end your turn with one short sentence pointing to the pane. The pane shows plain "
+        "text: write math in Unicode (x², √, →, ∫), not LaTeX."),
     "parameters": {
         "type": "object",
         "properties": {
@@ -100,6 +102,10 @@ PROPOSE_EXERCISE = {
                      "description": "diagnostic (before the route, max 3), check (right after teaching a step), "
                                     "practice (a fresh problem the learner solves without new teaching)."},
             "step_id": {"type": "string", "description": "Route step (required for check and practice)."},
+            "lesson": {"type": "string",
+                       "description": "check only: the explanation of this step the learner reads above the question, "
+                                      "a few short paragraphs or a worked example in plain text (max 3,000 "
+                                      "characters). Required for a step's first check."},
             "prompt": {"type": "string", "description": "The question exactly as the learner should see it."},
             "reference_answer": {"type": "string", "description": "A correct answer with the key steps."},
             "rubric": {"type": "string",
@@ -196,6 +202,9 @@ def _tool(schema: dict, fn: Callable[[Any, dict, str], dict]) -> Callable[..., s
             return _result(payload)
         except core.LwError as exc:
             return _result(exc.to_dict())
+        except db.StoreTooNew as exc:
+            return _result({"ok": False, "error": exc.code,
+                            "message": f"{exc} Tell the learner this; retrying will not help."})
         except Exception as exc:  # never raise into the agent loop
             logger.exception("learning-workbench tool %s failed", schema["name"])
             return _result({"ok": False, "error": "internal_error",
@@ -254,8 +263,9 @@ def next_action(view: dict) -> str:
     if step is None:
         return ("wrap_up: every active step has a correct unaided practice answer. Summarize what the evidence "
                 "shows (counts, not mastery) and ask whether the learner wants to go further.")
-    return (f"teach_next: teach step '{step['title']}' ({step['step_id']}) in chat in a few short paragraphs, "
-            "then pose a check for it (kind='check'). After a correct check, pose a practice exercise.")
+    return (f"teach_next: pose a check for step '{step['title']}' ({step['step_id']}) whose `lesson` teaches it; "
+            "the learner reads the lesson in the pane right above the question. Keep chat for their follow-up "
+            "questions. After a correct check, pose a practice exercise.")
 
 
 def _do_start(conn, args: dict, session_id: str) -> dict:
@@ -303,7 +313,7 @@ def _do_propose_exercise(conn, args: dict, session_id: str) -> dict:
         conn, session_id=session_id, study_id=args.get("study_id"), study_revision=args.get("study_revision"),
         kind=args.get("kind"), prompt=args.get("prompt"), reference_answer=args.get("reference_answer"),
         rubric=args.get("rubric"), hints=args.get("hints"), step_id=args.get("step_id"),
-        reasoning=args.get("reasoning"))
+        reasoning=args.get("reasoning"), lesson=args.get("lesson"))
     return {**out, "study_id": args.get("study_id"), "changed": True,
             "next_action": "wait_for_learner: end your turn now with one short sentence pointing to the Workbench pane."}
 

@@ -141,6 +141,8 @@ class Env:
         args = {"study_id": study_id, "study_revision": self.rev(session_id), "kind": kind, "step_id": step_id,
                 "prompt": "Compute lim_{h→0} (2xh + h²)/h.", "reference_answer": "2x",
                 "rubric": "Divides by h first, then lets h → 0; answer 2x.", "hints": ["Cancel h first."]}
+        if kind == "check":
+            args["lesson"] = "Divide each term by h first; only then let h shrink towards 0."
         args.update(kw)
         out = self.tool("learning_workbench_propose_exercise", args, session_id=session_id)
         assert out["ok"], out

@@ -61,6 +61,13 @@ def render(view: dict, *, material_text: str = "", plugin_version: str = "") -> 
         step = f" · {ex['step_title']}" if ex.get("step_title") else ""
         add(f"### Exercise {ex['sequence']} · {ex['kind']}{step}")
         add("")
+        if ex.get("lesson"):
+            add("Lesson:")
+            add("")
+            add(_fence(ex["lesson"]))
+            add("")
+            add("Question:")
+            add("")
         add(_fence(ex["prompt"]))
         add("")
         help_bits = [f"hints shown: {ex['hints_shown']} of {ex['hints_total']}",

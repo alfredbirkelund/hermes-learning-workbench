@@ -72,6 +72,8 @@ def _run(fn, *, study_id: str | None = None, notify: bool = False):
         return {"ok": True, **out}
     except core.LwError as exc:
         return JSONResponse(status_code=_STATUS.get(exc.code, 409), content=exc.to_dict())
+    except db.StoreTooNew as exc:
+        return JSONResponse(status_code=409, content={"ok": False, "error": exc.code, "message": str(exc)})
     except sqlite3.OperationalError as exc:  # locked or unwritable store: nothing was committed
         logger.warning("learning-workbench: storage unavailable: %s", exc)
         return JSONResponse(status_code=503, content={

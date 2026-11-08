@@ -215,9 +215,11 @@ await step('when Hermes cannot be asked, the attempt stays saved and the pane sa
     steps: [{ title: 'Expand (x+h)²', why: 'needed' }, { title: 'Limit h → 0', why: 'definition' }] })
   const v3 = (await agent('learning_workbench_get', {})).study
   await agent('learning_workbench_propose_exercise', { study_id: v3.study_id, study_revision: v3.study_revision, kind: 'check',
-    step_id: v3.route.steps[1].step_id, prompt: 'Simplify (2xh + h²)/h.', reference_answer: '2x + h', rubric: 'Divide each term by h.' })
+    step_id: v3.route.steps[1].step_id, prompt: 'Simplify (2xh + h²)/h.', reference_answer: '2x + h', rubric: 'Divide each term by h.',
+    lesson: 'Divide every term by h first.\n\nOnly then let h shrink towards 0.' })
   changed()
   await waitFor(() => q(pane.el, '[data-lw="prompt"]')?.textContent.startsWith('Simplify'), 'new exercise')
+  assert.equal(q(pane.el, '[data-lw="lesson"]')?.textContent, 'LessonDivide every term by h first.\n\nOnly then let h shrink towards 0.')
   host.failRequests = true
   type(q(pane.el, '[data-lw="answer"]'), '2x + h')
   click(q(pane.el, '[data-lw="submit"]'))

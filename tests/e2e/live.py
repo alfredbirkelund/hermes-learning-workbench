@@ -132,15 +132,37 @@ def open_session(gw: Gateway, state: dict, new: bool) -> str:
 def run_turn(text: str, new: bool = False) -> None:
     state = load()
     gw = Gateway(state)
+    start = 0
     try:
         sid = open_session(gw, state, new)
         start = len(gw.events)
         log("learner_message", text=text)
         res = gw.rpc("prompt.submit", {"session_id": sid, "text": text, "queued": True})
-        if res.get("status") not in (None, "started", "accepted", "ok"):
+        if res.get("status") not in (None, "started", "accepted", "ok", "streaming"):
             print(f"[prompt.submit status: {res.get('status')}]")
-        ev = gw._wait_event(lambda e: e.get("type") in ("turn.end", "turn.error") and e.get("session_id") in (sid, None),
-                            TURN_TIMEOUT)
+        # A turn ends with message.complete; keep listening a few seconds in case tool calls or another
+        # assistant message follow, and only stop once the session has been quiet after a completion.
+        ev: dict = {}
+        deadline, done_at = time.time() + TURN_TIMEOUT, None
+        while time.time() < deadline:
+            try:
+                for frame in gw._frames(3.0 if done_at else max(0.5, deadline - time.time())):
+                    if frame.get("method") != "event":
+                        continue
+                    e = frame.get("params") or {}
+                    gw.events.append(e)
+                    if e.get("session_id") not in (sid, None, ""):
+                        continue
+                    if e.get("type") in ("message.complete", "turn.end", "turn.error"):
+                        ev, done_at = e, time.time()
+                    elif e.get("type") in ("message.start", "message.delta", "tool.start", "tool.progress",
+                                           "thinking.delta"):
+                        done_at = None
+            except TimeoutError:
+                if done_at:
+                    break
+        if not done_at:
+            print(f"TIMEOUT after {TURN_TIMEOUT:.0f}s (events so far: {len(gw.events) - start})")
         tools, replies = [], []
         for e in gw.events[start:]:
             p = e.get("payload") or {}
@@ -148,12 +170,18 @@ def run_turn(text: str, new: bool = False) -> None:
                 tools.append(p.get("name") or p.get("tool") or "?")
             elif e.get("type") == "message.complete" and p.get("text"):
                 replies.append(p["text"])
+                if p.get("status") not in (None, "complete", "completed", "ok"):
+                    print(f"[message.complete status: {p.get('status')}]")
         log("tutor_turn", tools=tools, reply="\n".join(replies), end=ev.get("type"))
         print(f"tools: {', '.join(tools) or '(none)'}")
         print("tutor:", "\n".join(replies).strip()[:3000] or "(no text)")
         if ev.get("type") == "turn.error":
             print("TURN ERROR:", json.dumps(ev.get("payload"))[:500])
     finally:
+        with (LIVE / "events.jsonl").open("a", encoding="utf-8") as fh:
+            for e in gw.events[start:]:
+                fh.write(json.dumps({"type": e.get("type"), "session_id": e.get("session_id"),
+                                     "payload_keys": sorted((e.get("payload") or {}).keys())}) + "\n")
         gw.close()
 
 
@@ -218,6 +246,31 @@ def key() -> None:
         print(f"reference r{rev} ({reason}): {ref}\n  rubric: {rubric}")
     hints = json.loads(conn.execute("SELECT hints_json FROM exercises WHERE id = ?", (ex["exercise_id"],)).fetchone()[0])
     print("frozen hints:", hints)
+
+
+def review() -> None:
+    """Evaluator-only: every exercise with its frozen key, attempts (help class) and checks."""
+    state = load()
+    study = study_view(state)
+    if not study:
+        print("(no study)")
+        return
+    conn = sqlite3.connect(f"file:{HOME / 'plugin-data' / PLUGIN / 'data.db'}?mode=ro", uri=True)
+    for ex in study["exercises"]:
+        refs = conn.execute("SELECT revision, reference_answer, rubric FROM exercise_references WHERE exercise_id = ? "
+                            "ORDER BY revision", (ex["exercise_id"],)).fetchall()
+        print(f"## exercise {ex['sequence']} · {ex['kind']} · {ex['state']} · step: {ex['step_title'] or '-'}")
+        print("   prompt:", ex["prompt"].replace("\n", " ")[:400])
+        for rev, ref, rubric in refs:
+            print(f"   key r{rev}: {ref.replace(chr(10), ' ')[:300]} || rubric: {rubric.replace(chr(10), ' ')[:300]}")
+        for a in ex["attempts"]:
+            print(f"   attempt {a['number']} ({a['help_class']}): {a['answer']!r}" +
+                  (f" | reasoning: {a['reasoning']!r}" if a["reasoning"] else ""))
+            for s in a["assessments"]:
+                print(f"     check r{s['revision']}: {s['verdict']} | quote {s['evidence_quote']!r}\n       "
+                      f"{s['explanation']}" + (f"\n       gap: {s['gap']}" if s["gap"] else ""))
+            for c in a["contests"]:
+                print(f"     contest ({'answered' if c['answered'] else 'pending'}): {c['text']!r}")
 
 
 def learner_action(action: str, *args: str) -> None:
@@ -333,6 +386,8 @@ def main(argv: list[str]) -> None:
         show(study_view(load()))
     elif cmd == "key":
         key()
+    elif cmd == "review":
+        review()
     elif cmd in ("answer", "contest", "hint", "reveal", "retry", "skip"):
         learner_action(cmd, *args)
         if cmd in ("answer", "contest"):

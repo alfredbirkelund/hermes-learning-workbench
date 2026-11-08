@@ -31,6 +31,7 @@ MAX_STEP_TITLE = 120
 MAX_STEP_WHY = 300
 MAX_NOTE = 500
 MAX_PROMPT = 6_000
+MAX_LESSON = 3_000
 MAX_REFERENCE = 6_000
 MAX_RUBRIC = 3_000
 MAX_HINT = 1_500
@@ -420,7 +421,7 @@ def edit_route(conn, *, study_id: str, base_plan_revision: Any, op: Any, step_id
 
 def propose_exercise(conn, *, session_id: str, study_id: Any, study_revision: Any, kind: Any, prompt: Any,
                      reference_answer: Any, rubric: Any, hints: Any = None, step_id: Any = None,
-                     reasoning: Any = "optional") -> dict:
+                     reasoning: Any = "optional", lesson: Any = None) -> dict:
     if kind not in EXERCISE_KINDS:
         raise LwError("invalid_input", f"kind must be one of {', '.join(EXERCISE_KINDS)}.", field="kind")
     if reasoning is None:
@@ -435,6 +436,11 @@ def propose_exercise(conn, *, session_id: str, study_id: Any, study_revision: An
     if not isinstance(hints, list) or len(hints) > MAX_HINTS:
         raise LwError("invalid_input", f"hints must be a list of at most {MAX_HINTS} strings.", field="hints")
     hint_list = [_clean(h, f"hints[{i}]", MAX_HINT) for i, h in enumerate(hints)]
+    lesson_s = _clean(lesson, "lesson", MAX_LESSON, required=False)
+    if lesson_s and kind != "check":
+        raise LwError("invalid_input",
+                      "Only a check carries a lesson. A diagnostic finds the starting point and practice shows what the "
+                      "learner can do without new teaching; omit lesson.", field="lesson")
     with write_tx(conn):
         study = _study(conn, study_id)
         _require_agent_binding(study, session_id)
@@ -475,20 +481,29 @@ def propose_exercise(conn, *, session_id: str, study_id: Any, study_revision: An
                 raise LwError("step_skipped", "The learner skipped this step. Pick another step or ask them in chat.",
                               step_id=step_id)
             step_title = items[step_id]["title"]
+            if kind == "check" and not lesson_s:
+                checked_before = conn.execute("SELECT 1 FROM exercises WHERE study_id = ? AND step_id = ? "
+                                              "AND kind = 'check' LIMIT 1", (study_id, step_id)).fetchone()
+                if checked_before is None:
+                    raise LwError("lesson_required",
+                                  f"Teach step '{step_title}' before checking it: pass `lesson`, the explanation the "
+                                  "learner reads in the pane right above the question (a few short paragraphs or a "
+                                  "worked example, plain text). Teach the idea; do not solve this exercise.",
+                                  step_id=step_id)
         seq = conn.execute("SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM exercises WHERE study_id = ?",
                            (study_id,)).fetchone()["n"]
         eid = new_id("ex")
         ts = now()
         conn.execute(
             "INSERT INTO exercises(id, study_id, sequence, step_id, step_title, kind, created_at, created_by, prompt, "
-            "reasoning_mode, hints_json, state, state_changed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (eid, study_id, seq, step_id or None, step_title, kind, ts, "agent", prompt_s, reasoning,
+            "lesson, reasoning_mode, hints_json, state, state_changed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (eid, study_id, seq, step_id or None, step_title, kind, ts, "agent", prompt_s, lesson_s, reasoning,
              json.dumps(hint_list, ensure_ascii=False), "awaiting_answer", ts))
         conn.execute(
             "INSERT INTO exercise_references(exercise_id, revision, created_at, reference_answer, rubric, reason) "
             "VALUES (?,?,?,?,?,?)", (eid, 1, ts, ref_s, rubric_s, "initial"))
         _event(conn, study_id, "agent", "exercise_proposed", eid, exercise_kind=kind, sequence=seq,
-               hints=len(hint_list))
+               hints=len(hint_list), lesson_chars=len(lesson_s))
         rev = _bump(conn, study_id, "agent")
     return {"exercise_id": eid, "sequence": seq, "state": "awaiting_answer", "study_revision": rev}
 
@@ -882,7 +897,8 @@ def study_view(conn, study_id: str, *, audience: str) -> dict:
         ref = _latest_reference(conn, ex["id"])
         item = {
             "exercise_id": ex["id"], "sequence": ex["sequence"], "kind": ex["kind"], "step_id": ex["step_id"],
-            "step_title": ex["step_title"], "prompt": ex["prompt"], "reasoning": ex["reasoning_mode"],
+            "step_title": ex["step_title"], "prompt": ex["prompt"], "lesson": ex["lesson"],
+            "reasoning": ex["reasoning_mode"],
             "state": ex["state"], "created_at": ex["created_at"], "hints_total": len(hints),
             "hints_shown": shown, "solution_revealed": revealed, "reference_revision": ref["revision"],
             "attempts": [],

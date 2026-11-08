@@ -18,6 +18,18 @@ RUNTIME = os.environ.get("LW_HERMES_RUNTIME", str(Path.home() / ".hermes" / "her
 DEPS = REPO / ".test-artifacts" / "pydeps"
 
 MUTATIONS = [
+    ("first check posed without a lesson", "lw/core.py",
+     "                if checked_before is None:\n                    raise LwError(\"lesson_required\"",
+     "                if False:\n                    raise LwError(\"lesson_required\"",
+     "tests/test_lessons.py::test_a_steps_first_check_needs_a_lesson_and_a_refusal_stores_nothing"),
+    ("schema 1 store left un-migrated", "lw/db.py",
+     "    2: [\"ALTER TABLE exercises ADD COLUMN lesson TEXT NOT NULL DEFAULT ''\"],",
+     "    2: [],",
+     "tests/test_lessons.py::test_a_v1_store_is_upgraded_in_place_and_keeps_every_record"),
+    ("newer store opened anyway", "lw/db.py",
+     "    if found is not None and found > SCHEMA_VERSION:\n        raise _too_new(found)",
+     "    if False:\n        raise _too_new(found)",
+     "tests/test_lessons.py::test_a_store_from_a_newer_version_is_refused_untouched_with_a_clear_message"),
     ("quote verification disabled", "lw/core.py",
      "if not any(needle in h for h in haystacks if h):", "if False:",
      "tests/test_learning_loop.py::test_verdict_must_quote_the_learner_and_nothing_is_recorded_otherwise"),

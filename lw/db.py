@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 PLUGIN_NAME = "learning-workbench"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS exercises (
     created_at TEXT NOT NULL,
     created_by TEXT NOT NULL,
     prompt TEXT NOT NULL,
+    lesson TEXT NOT NULL DEFAULT '',
     reasoning_mode TEXT NOT NULL,
     hints_json TEXT NOT NULL,
     state TEXT NOT NULL,
@@ -150,6 +151,54 @@ _initialized: set[str] = set()
 _init_lock = threading.Lock()
 
 
+class StoreTooNew(Exception):
+    """The store was written by a newer plugin version. It is left untouched rather than read by older code."""
+
+    code = "store_too_new"
+
+# Additive, in-place migrations: schema version -> statements that bring version-1 data up to it.
+# Attempts, checks and events are never rewritten by a migration.
+_MIGRATIONS: dict[int, list[str]] = {
+    2: ["ALTER TABLE exercises ADD COLUMN lesson TEXT NOT NULL DEFAULT ''"],
+}
+
+
+def _schema_version(conn: sqlite3.Connection) -> Optional[int]:
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone() is None:
+        return None
+    row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+    return int(row["value"]) if row else None
+
+
+def _too_new(found: int) -> StoreTooNew:
+    return StoreTooNew(
+        f"Your Learning Workbench records were saved by a newer version of the plugin (data format {found}; "
+        f"this version reads up to {SCHEMA_VERSION}). Update the plugin to open them. Nothing was changed.")
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Refuse a newer store before touching it, upgrade an older one in one write transaction, create a new one."""
+    found = _schema_version(conn)
+    if found is not None and found > SCHEMA_VERSION:
+        raise _too_new(found)
+    if found is not None and found < SCHEMA_VERSION:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            found = _schema_version(conn) or 0  # another process may have upgraded it in the meantime
+            if found > SCHEMA_VERSION:
+                raise _too_new(found)
+            for version in range(found + 1, SCHEMA_VERSION + 1):
+                for statement in _MIGRATIONS.get(version, []):
+                    conn.execute(statement)
+            conn.execute("UPDATE meta SET value = ? WHERE key = 'schema_version'", (str(SCHEMA_VERSION),))
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        conn.execute("COMMIT")
+    conn.executescript(_SCHEMA)  # idempotent: builds a new store, adds nothing to an up-to-date one
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+
+
 def _prepare(conn: sqlite3.Connection, key: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.isolation_level = None  # explicit BEGIN IMMEDIATE / COMMIT in core
@@ -157,14 +206,7 @@ def _prepare(conn: sqlite3.Connection, key: str) -> sqlite3.Connection:
     conn.execute("PRAGMA secure_delete=ON")
     with _init_lock:
         if key not in _initialized:
-            conn.executescript(_SCHEMA)
-            row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
-            if row is None:
-                conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
-            elif int(row["value"]) > SCHEMA_VERSION:
-                raise RuntimeError(
-                    f"Learning Workbench data was written by a newer version (schema {row['value']}); "
-                    f"update the plugin before opening it")
+            _migrate(conn)
             _initialized.add(key)
     return conn
 

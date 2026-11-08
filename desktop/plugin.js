@@ -367,6 +367,12 @@ function ExerciseCard({ ctx, study, exercise, draft, onChanged, onError, sendToT
     h(Row, null,
       h('span', { style: T.label }, `Exercise ${exercise.sequence} · ${exercise.kind}`),
       exercise.step_title ? h('span', { style: { ...T.faint, fontSize: '0.75rem' } }, exercise.step_title) : null),
+    exercise.lesson
+      ? h('div', { 'data-lw': 'lesson', style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+          h(Label, null, 'Lesson'),
+          h('div', { style: T.text }, exercise.lesson))
+      : null,
+    exercise.lesson ? h(Label, null, 'Question') : null,
     h('div', { style: { ...T.text, fontSize: '0.95rem' }, 'data-lw': 'prompt' }, exercise.prompt),
     exercise.hints.length
       ? h('ol', { style: { margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }, 'data-lw': 'hints' },
@@ -450,6 +456,11 @@ function History({ ctx, study, current, onChanged, sendToTutor }) {
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 } },
       earlier.slice().reverse().map(ex => h('div', { key: ex.exercise_id, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
         h('div', { style: T.label }, `Exercise ${ex.sequence} · ${ex.kind}${ex.state === 'skipped' ? ' · skipped' : ''}`),
+        ex.lesson
+          ? h('details', { 'data-lw': 'history-lesson' },
+              h('summary', { style: { cursor: 'pointer', ...T.muted } }, 'Lesson'),
+              h('div', { style: { ...T.text, marginTop: 4 } }, ex.lesson))
+          : null,
         h('div', { style: T.text }, ex.prompt),
         ex.attempts.map(a => h('div', { key: a.attempt_id, style: { display: 'flex', flexDirection: 'column', gap: 4 } },
           h('div', { style: { ...T.faint, fontSize: '0.75rem' } }, `Attempt ${a.number} · ${HELP[a.help_class] || a.help_class}`),

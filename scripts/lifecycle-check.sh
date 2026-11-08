@@ -67,7 +67,9 @@ PY
   check "validate passes on a clean export" test $v -eq 0
   echo; echo "## install from git at the pinned SHA"
   H plugins install "file://$repo" --ref "$sha" --enable --yes-deps; check "install exits 0" test $? -eq 0
-  H plugins list | grep -E "learning-workbench" ; check "listed as enabled" bash -c "\"$LW_PYTHON\" -m hermes_cli.main plugins list 2>&1 | grep learning-workbench | grep -q enabled"
+  # Rich truncates names to 15 characters in a non-TTY table ("learning-workb…"), so check the JSON listing.
+  H plugins list --json 2>/dev/null | "$LW_PYTHON" -c 'import json,sys; [print(p["name"], p["status"], p.get("version")) for p in json.load(sys.stdin) if p["name"] == "learning-workbench"]'
+  check "listed as enabled" bash -c "\"$LW_PYTHON\" -m hermes_cli.main plugins list --json 2>/dev/null | \"$LW_PYTHON\" -c 'import json,sys; sys.exit(0 if any(p[\"name\"] == \"learning-workbench\" and p[\"status\"] == \"enabled\" for p in json.load(sys.stdin)) else 1)'"
   echo; echo "## validate --install-deps (clean export, after the install prepared this home's runtime)"
   H plugins validate "$export_dir" --install-deps; check "validate --install-deps passes" test $? -eq 0
   echo; echo "## doctor (installed copy)"

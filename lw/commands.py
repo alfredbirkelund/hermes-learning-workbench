@@ -42,6 +42,9 @@ def _status(view: dict) -> str:
     open_id = view.get("open_exercise_id")
     if open_id:
         ex = next(e for e in view["exercises"] if e["exercise_id"] == open_id)
+        if ex.get("lesson"):
+            lines.append(f"Lesson ({ex['step_title'] or 'this step'}):")
+            lines += [f"  {line}" if line else "" for line in ex["lesson"].splitlines()]
         lines.append(f"Exercise {ex['sequence']} ({ex['kind']}): {ex['prompt']}")
         if ex["hints"]:
             lines += [f"  Hint {i}: {h}" for i, h in enumerate(ex["hints"], 1)]
@@ -86,7 +89,10 @@ def handle(raw_args: str, *, session_id: str = "", ask: Optional[Callable] = Non
         return USAGE
     if not session_id:
         return "Learning Workbench needs a chat session. Send a message first, then try /study again."
-    conn = db.connect()
+    try:
+        conn = db.connect()
+    except db.StoreTooNew as exc:
+        return str(exc)
     try:
         row = core.active_study_for_session(conn, session_id)
         if row is None:
