@@ -4,6 +4,7 @@ Usage: python tests/e2e/desktop_act.py <step> [<step> ...]
 Steps:
   click:<visible text>        click the smallest visible element whose text equals/starts with it
   clicksel:<css selector>     click the first element matching the selector
+  clickxy:<x>,<y>             click at viewport coordinates (CSS pixels)
   type:<css selector>=<text>  focus an input/textarea and insert text (real key input)
   key:<Key>                   press a key (Enter, Escape, Tab), "key:Ctrl+Enter" for chords
   wait:<seconds>
@@ -83,6 +84,11 @@ def main(steps):
                 hit = page.wait(CLICK_SEL % json.dumps(arg), timeout=20)
                 mouse_click(page, hit["x"], hit["y"])
                 print(f"clicked {hit}")
+                time.sleep(0.4)
+            elif verb == "clickxy":
+                x, y = (float(v) for v in arg.split(","))
+                mouse_click(page, x, y)
+                print(f"clicked at {x},{y}")
                 time.sleep(0.4)
             elif verb == "type":
                 sel, text = _split_selector(arg)
