@@ -14,6 +14,8 @@ def _on_post_compaction(session_id: str = "", old_session_id: str = "", **_: obj
         return
     conn = None
     try:
+        if not db.store_exists():  # no store, no study to follow; never create one for people who never study
+            return
         conn = db.connect()
         study_id = core.rebind_session(conn, old_session_id=old_session_id, new_session_id=session_id)
         if study_id:

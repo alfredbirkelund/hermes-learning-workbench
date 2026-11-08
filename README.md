@@ -74,12 +74,16 @@ dependencies, no accounts, no network calls of its own.
 5. After a correct answer that needed help, Hermes poses a fresh practice problem so you can show
    it without help.
 6. **Export record** writes a Markdown file of everything: route, lessons, prompts, your answers
-   word for word, help received, every verdict and contest.
+   word for word, help received, every verdict and contest. **Finish study…** moves a study to
+   *Finished in this chat*, where you can still export or delete it, and lets the chat start a new
+   one.
 
 Without Desktop (CLI, TUI, messaging): `/study` shows the current lesson and exercise; use `/study
 answer <text>` (add a line `Reasoning: …`), `/study hint`, `/study reveal`, `/study skip`, `/study
-retry`, `/study contest <why>`, `/study export`, `/study finish`, `/study delete`. This is a
-fallback, not a full second interface. (`/learn` is a Hermes built-in, hence `/study`.)
+retry`, `/study contest <why>`, `/study export`, `/study finish`, `/study delete`. With no active
+study, `/study` lists this chat's finished studies by number; `/study export N` and `/study delete
+N` act on one. This is a fallback, not a full second interface. (`/learn` is a Hermes built-in,
+hence `/study`.)
 
 ## Privacy and data
 
@@ -143,7 +147,7 @@ See [docs/TESTING.md](docs/TESTING.md) for what was run and what was not.
 
 ```bash
 scripts/verify.sh            # JS syntax check + deterministic tests (real plugin loader, registry, router)
-scripts/mutation-check.py    # breaks 17 invariants one at a time; each must be caught
+scripts/mutation-check.py    # breaks 22 invariants one at a time; each must be caught
 scripts/pane-harness.sh      # real plugin.js in React 19/jsdom against the real backend (host stubbed)
 scripts/lifecycle-check.sh   # validate, install the previous release, update, doctor, disable, reinstall, uninstall
 tests/e2e/live.py            # drive a real `hermes serve` with a real model (see its docstring)

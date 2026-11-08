@@ -1,0 +1,80 @@
+# Catalog submission draft: Learning Workbench
+
+Status: DRAFT. Not submitted. Needs Alfred's approval to publish the repository and open the PR.
+Fill `sha` with the full 40-character release commit after the repository is public, and re-run
+`hermes plugins validate <checkout> --install-deps` on that exact commit.
+
+## plugin-catalog/learning-workbench.yaml
+
+```yaml
+name: learning-workbench
+title: Learning Workbench
+repo: https://github.com/alfredbirkelund/hermes-learning-workbench
+sha: <40-hex release commit>
+version: "0.2.0"
+description: "Study with Hermes in a Desktop pane: a short diagnosis, a route of 2–7 steps you can rename or skip, then one lesson and exercise at a time, answered in your own words. The plugin keeps the record honest: answer keys and hints are frozen before you answer, only you can submit an attempt (the agent's six tools propose and read), every check must quote your words, and each attempt is labelled unaided, after feedback, after hints, after help in chat or after a revealed solution. Drafts and attempts survive restarts and compaction, a contest keeps the earlier verdict, and you can export a Markdown record. /study covers the CLI and messaging. Disclosure — studies are stored locally in $HERMES_HOME/plugin-data/learning-workbench/ (SQLite) until you delete them, including after uninstall; while an exercise is open in a chat, the pre_llm_call hook adds a short reminder with that exercise's question to the turn's user message and records that the turn happened (not its text); no network calls of its own, no credentials, no shell commands, no background processes, no telemetry."
+maintainer: alfredbirkelund
+tier: community
+category: desktop
+requires_hermes: ">=0.23.0"
+docs_url: https://github.com/alfredbirkelund/hermes-learning-workbench#readme
+readme: true
+platforms: []
+screenshots: []   # add up to 6 raw.githubusercontent.com URLs pinned to <sha> once the Desktop walkthrough is recorded
+known_issues:
+  - "The Desktop pane is opt-in: after installing, turn it on under Capabilities → Plugins → Learning Workbench."
+  - "Verdicts come from your configured model. They are proposals, not grades; contest any you disagree with."
+capabilities:
+  provides_tools:
+    - learning_workbench_start
+    - learning_workbench_get
+    - learning_workbench_propose_plan
+    - learning_workbench_propose_exercise
+    - learning_workbench_assess
+    - learning_workbench_revise_reference
+  provides_hooks:
+    - post_compaction
+    - pre_llm_call
+  provides_middleware: []
+  requires_env: []
+```
+
+## PR description
+
+**Learning Workbench** turns Hermes into a tutor whose record you can trust. You bring a goal and
+material; Hermes diagnoses where to start, proposes a short route, and teaches one step at a time
+in a Desktop pane. You answer each exercise in your own words. The plugin, not the model, decides
+what counts as your work:
+
+- answer keys, rubrics and hints are frozen before you answer and hidden until you take a hint or
+  confirm a reveal;
+- only the learner can submit an attempt (pane routes or `/study`); the agent's tools can only
+  propose and read;
+- a check must quote the attempt word for word, and the quote is verified;
+- every attempt is labelled by the help it had: unaided, after feedback, after hints, after help
+  in chat, or after a revealed solution;
+- a route step's first check must carry a lesson, so nothing is tested before it is taught.
+
+Hermes surfaces used: six tools (`ctx.register_tool`), `pre_llm_call` and `post_compaction` hooks,
+a `/study` slash command, dashboard plugin routes (`dashboard/manifest.json` + `plugin_api.py`),
+plugin storage (`plugin-data/learning-workbench/`) and a Desktop pane (`desktop/plugin.js`, plugin
+SDK only: `ctx.rest`, `host.request`, `host.composer` when present, plugin events).
+
+Disclosures (rule 13):
+- Stores studies locally in `$HERMES_HOME/plugin-data/learning-workbench/data.db` (SQLite) and
+  exports in `…/exports/`. Kept after update, disable and uninstall; removed per study by the
+  learner's two-step delete.
+- While an exercise is open in a chat, `pre_llm_call` adds a short reminder (including that
+  exercise's question) to the turn's user message, never the system prompt, and records that a
+  chat turn happened (not its content). Chats without an open exercise are untouched, and nothing
+  is created for people who never use the Workbench.
+- No network calls of its own, no credentials, no shell commands, no background processes, no
+  telemetry. Verdicts use the user's configured model through Hermes.
+
+Validation at the pinned commit: `hermes plugins validate <checkout> --install-deps` → (paste
+result). Tests: `scripts/verify.sh` (53 tests), `scripts/mutation-check.py` (22/22),
+`scripts/pane-harness.sh` (19 steps), `scripts/lifecycle-check.sh` (install, update from the
+previous release with data migration, disable/enable, reinstall, uninstall keeps data). Live
+sessions with a real model are summarised in `docs/TESTING.md`.
+
+Screenshots: (to add from the Desktop walkthrough).

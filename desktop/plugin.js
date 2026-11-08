@@ -48,6 +48,13 @@ function every(ctx, ms, fn) {
   return () => window.clearInterval(id)
 }
 
+// A one-shot timer the host cancels if the plugin is disabled or reloaded first. Returns a cancel function.
+function later(ctx, ms, fn) {
+  if (typeof ctx.setTimeout === 'function') return ctx.setTimeout(fn, ms)
+  const id = window.setTimeout(fn, ms)
+  return () => window.clearTimeout(id)
+}
+
 function listen(ctx, type, fn) {
   if (typeof ctx.onEvent === 'function') return ctx.onEvent(type, fn)
   if (host && typeof host.onEvent === 'function') return host.onEvent(type, fn)
@@ -265,10 +272,10 @@ function ExerciseCard({ ctx, study, exercise, draft, onChanged, onError, sendToT
     }
   }, [draft && draft.revision])
 
-  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current) }, [])
+  useEffect(() => () => { if (timer.current) timer.current() }, [])
 
   const saveNow = useCallback(async (a, r) => {
-    if (timer.current) { window.clearTimeout(timer.current); timer.current = null }
+    if (timer.current) { timer.current(); timer.current = null }
     setSave({ phase: 'saving', message: 'Saving…' })
     try {
       const out = await ctx.rest(`/studies/${study.study_id}/exercises/${exercise.exercise_id}/draft`, {
@@ -295,8 +302,8 @@ function ExerciseCard({ ctx, study, exercise, draft, onChanged, onError, sendToT
     setReasoning(r)
     dirty.current = true
     setSave({ phase: 'pending', message: 'Unsaved changes' })
-    if (timer.current) window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => saveNow(a, r), SAVE_DEBOUNCE_MS)
+    if (timer.current) timer.current()
+    timer.current = later(ctx, SAVE_DEBOUNCE_MS, () => { timer.current = null; saveNow(a, r) })
   }
 
   const resolveConflict = keepMine => {
@@ -317,7 +324,7 @@ function ExerciseCard({ ctx, study, exercise, draft, onChanged, onError, sendToT
   const doSubmit = async () => {
     if (!answer.trim() || submitting.current) return
     submitting.current = true // synchronous guard: a double click must not start two submissions
-    if (timer.current) { window.clearTimeout(timer.current); timer.current = null }
+    if (timer.current) { timer.current(); timer.current = null }
     if (!reqId.current) reqId.current = requestId()
     setSubmit({ phase: 'saving', message: 'Saving your answer…' })
     let receipt
@@ -435,7 +442,7 @@ function ExerciseCard({ ctx, study, exercise, draft, onChanged, onError, sendToT
           h('div', null, h(Label, null, `Your attempt ${lastAttempt.number}`), h('div', { style: T.quote }, lastAttempt.answer)),
           h(Verdicts, { ctx, study, exercise, attempt: lastAttempt, onChanged, sendToTutor }),
           h(Row, null,
-            canRetry ? h(Button, { size: 'sm', onClick: () => action('retry', null, () => window.setTimeout(() => answerRef.current && answerRef.current.focus(), 50)), 'data-lw': 'retry' }, 'Try again') : null,
+            canRetry ? h(Button, { size: 'sm', onClick: () => action('retry', null, () => later(ctx, 50, () => answerRef.current && answerRef.current.focus())), 'data-lw': 'retry' }, 'Try again') : null,
             canReveal ? h(Button, { size: 'sm', variant: 'ghost', onClick: () => setRevealOpen(true), 'data-lw': 'reveal' }, 'Reveal solution…') : null))
       : null,
     exercise.state === 'skipped' ? h('div', { style: T.muted }, 'You skipped this exercise.') : null,
@@ -473,7 +480,7 @@ function History({ ctx, study, current, onChanged, sendToTutor }) {
           h(Verdicts, { ctx, study, exercise: ex, attempt: a, onChanged, sendToTutor })))))))
 }
 
-function StudyActions({ ctx, study, onChanged, onError, onDeleted }) {
+function StudyActions({ ctx, study, onChanged, onError, onDeleted, compact = false }) {
   const [exported, setExported] = useState(null)
   const [busy, setBusy] = useState('')
   const [finishOpen, setFinishOpen] = useState(false)
@@ -495,7 +502,7 @@ function StudyActions({ ctx, study, onChanged, onError, onDeleted }) {
       onError(restError(err).message)
     }
   }
-  return h('div', { style: { ...T.section, display: 'flex', flexDirection: 'column', gap: 8 } },
+  return h('div', { style: { ...(compact ? {} : T.section), display: 'flex', flexDirection: 'column', gap: 8 } },
     h(Row, null,
       h(Button, { size: 'xs', variant: 'outline', onClick: doExport, disabled: busy === 'export', 'data-lw': 'export' },
         busy === 'export' ? 'Exporting…' : 'Export record'),
@@ -508,7 +515,7 @@ function StudyActions({ ctx, study, onChanged, onError, onDeleted }) {
             ctx.os && ctx.os.revealPath ? h(Button, { size: 'xs', variant: 'ghost', onClick: () => ctx.os.revealPath(exported.path) }, 'Show file') : null,
             ctx.os && ctx.os.writeClipboard ? h(Button, { size: 'xs', variant: 'ghost', onClick: () => ctx.os.writeClipboard(exported.markdown) }, 'Copy Markdown') : null))
       : null,
-    h('div', { style: { ...T.faint, fontSize: '0.72rem' } },
+    compact ? null : h('div', { style: { ...T.faint, fontSize: '0.72rem' } },
       'Stored locally in this Hermes profile. The material and submitted answers go to your configured model provider when the tutor reads them; drafts stay local.'),
     h(ConfirmDialog, {
       open: finishOpen, onClose: () => setFinishOpen(false),
@@ -518,15 +525,16 @@ function StudyActions({ ctx, study, onChanged, onError, onDeleted }) {
         onChanged()
       },
       title: 'Finish this study?', confirmLabel: 'Finish',
-      description: 'It stays readable and exportable, and this chat can start a new study.',
+      description: 'It moves to “Finished in this chat”, where you can still export or delete it, and this chat can start a new study.',
     }),
     h(ConfirmDialog, {
       open: Boolean(deleteReq), onClose: () => setDeleteReq(null), destructive: true,
       onConfirm: async () => {
         try {
-          await ctx.rest(`/studies/${study.study_id}/delete`, { method: 'POST', body: { confirm_token: deleteReq.confirm_token } })
+          const out = await ctx.rest(`/studies/${study.study_id}/delete`, { method: 'POST', body: { confirm_token: deleteReq.confirm_token } })
           setDeleteReq(null)
-          onDeleted()
+          const left = (out && out.exports_left) || []
+          onDeleted(left.length ? `Study deleted, but ${left.length} exported file(s) could not be removed. Delete them yourself: ${left.join(', ')}` : '')
         } catch (err) {
           setDeleteReq(null)
           onError(restError(err).message)
@@ -535,6 +543,16 @@ function StudyActions({ ctx, study, onChanged, onError, onDeleted }) {
       title: 'Delete this study permanently?', confirmLabel: 'Delete',
       description: deleteReq ? `“${deleteReq.goal}”: ${deleteReq.exercises} exercise(s), ${deleteReq.attempts} attempt(s), ${deleteReq.checks} check(s) and ${deleteReq.exports} exported file(s). Other studies are not affected. This cannot be undone.` : '',
     }))
+}
+
+// Finished studies stay reachable: each keeps its export and delete actions.
+function FinishedStudies({ ctx, studies, onChanged, onError, onDeleted }) {
+  if (!studies.length) return null
+  return h('div', { style: { ...T.section, display: 'flex', flexDirection: 'column', gap: 10 }, 'data-lw': 'finished' },
+    h(Label, null, `Finished in this chat (${studies.length})`),
+    studies.map(s => h('div', { key: s.study_id, style: { display: 'flex', flexDirection: 'column', gap: 4 }, 'data-lw-finished': s.study_id },
+      h('div', { style: T.text }, s.goal),
+      h(StudyActions, { ctx, study: { study_id: s.study_id, status: s.status }, onChanged, onError, onDeleted, compact: true }))))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -607,7 +625,9 @@ function Workbench({ ctx }) {
   }, [runtimeId])
 
   const onError = msg => setNotice(msg)
+  const onFinishedDeleted = msg => { setNotice(msg || 'Study deleted.'); load() }
   const study = view.study
+  const finished = h(FinishedStudies, { ctx, studies: view.earlier, onChanged: load, onError, onDeleted: onFinishedDeleted })
 
   let body
   if (!storedId) {
@@ -621,8 +641,7 @@ function Workbench({ ctx }) {
   } else if (!study) {
     body = h(Fragment, null,
       h(StartForm, { ctx, storedId, onStarted: s => setView(v => ({ ...v, study: s })), sendToTutor }),
-      view.earlier.length ? h('div', { style: { ...T.section, ...T.muted, fontSize: '0.8rem' } },
-        `Finished studies in this chat: ${view.earlier.map(s => s.goal).join(' · ')}`) : null)
+      finished)
   } else {
     const open = study.open_exercise_id ? study.exercises.find(e => e.exercise_id === study.open_exercise_id) : null
     const current = open || (study.latest_exercise_id ? study.exercises.find(e => e.exercise_id === study.latest_exercise_id) : null)
@@ -642,7 +661,8 @@ function Workbench({ ctx }) {
           : h('div', { style: T.muted }, tutorBusy ? 'Hermes is replying…' : 'No exercise yet. The tutor will pose one here.')),
       sendState.message ? h('div', { style: { ...T.muted, fontSize: '0.8rem' }, 'data-lw-send': sendState.phase, role: sendState.phase === 'unsent' ? 'alert' : undefined }, sendState.message) : null,
       h(History, { ctx, study, current: current && current.exercise_id, onChanged: load, sendToTutor }),
-      h(StudyActions, { ctx, study, onChanged: load, onError, onDeleted: () => { setNotice('Study deleted.'); load() } }))
+      h(StudyActions, { ctx, study, onChanged: load, onError, onDeleted: onFinishedDeleted }),
+      finished)
   }
 
   return h('div', { 'data-lw-root': '1', style: { display: 'flex', flexDirection: 'column', gap: 12, padding: 12, height: '100%', overflowY: 'auto', fontSize: '0.875rem', color: 'var(--ui-text-primary)' } },

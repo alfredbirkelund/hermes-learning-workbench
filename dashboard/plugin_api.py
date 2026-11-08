@@ -79,6 +79,11 @@ def _run(fn, *, study_id: str | None = None, notify: bool = False):
         return JSONResponse(status_code=503, content={
             "ok": False, "error": "storage_unavailable",
             "message": "Not saved: the Workbench storage is busy or unavailable. Your text is still here; try again."})
+    except OSError as exc:  # only the export writes files here; its event is recorded after the file exists
+        logger.warning("learning-workbench: file operation failed: %s", exc)
+        return JSONResponse(status_code=500, content={
+            "ok": False, "error": "file_error",
+            "message": f"The export file could not be written ({exc.strerror or exc}). Your records are unchanged."})
     finally:
         if conn is not None:
             conn.close()
@@ -212,7 +217,8 @@ def post_delete(study_id: str, body: dict = Body(...)) -> Any:
 
     def op(conn):
         out = core.confirm_delete(conn, study_id=study_id, token=b.get("confirm_token"))
-        out["exports_removed"] = export.delete_exports(study_id)
+        files = export.delete_exports(study_id)
+        out["exports_removed"], out["exports_left"] = files["removed"], files["left"]
         tools.broadcast(study_id)
         return out
     return _run(op)

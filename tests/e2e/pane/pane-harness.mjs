@@ -283,12 +283,24 @@ await step('export writes a Markdown record and can copy it', async () => {
   assert.match(clipboard[0], /^# Learning record: Understand why d\/dx x² = 2x/)
 })
 
-await step('delete asks with exact counts and removes the study', async () => {
-  click(q(pane.el, '[data-lw="delete"]'))
-  const dialog = await waitFor(() => q(pane.el, '[role="dialog"][data-destructive="1"]'), 'delete dialog')
-  assert.match(dialog.textContent, /2 exercise\(s\), 3 attempt\(s\), 2 check\(s\) and 1 exported file\(s\)/)
+await step('a finished study moves to the finished list and can still be exported', async () => {
+  click(q(pane.el, '[data-lw="finish"]'))
+  const dialog = await waitFor(() => q(pane.el, '[role="dialog"]'), 'finish dialog')
+  assert.match(dialog.textContent, /Finished in this chat/)
   click(q(dialog, '[data-dialog="confirm"]'))
-  await waitFor(() => q(pane.el, '[data-lw="start-form"]'), 'back to empty state')
+  const finished = await waitFor(() => q(pane.el, '[data-lw="finished"]'), 'finished list')
+  assert.ok(q(pane.el, '[data-lw="start-form"]'), 'the chat can start a new study')
+  assert.match(finished.textContent, /Finished in this chat \(1\)Understand why d\/dx x² = 2x/)
+  click(q(finished, '[data-lw="export"]'))
+  await waitFor(() => q(finished, '[data-lw="exported"]'), 'export from the finished list')
+})
+
+await step('delete asks with exact counts and removes the study', async () => {
+  click(q(pane.el, '[data-lw="finished"] [data-lw="delete"]'))
+  const dialog = await waitFor(() => q(pane.el, '[role="dialog"][data-destructive="1"]'), 'delete dialog')
+  assert.match(dialog.textContent, /2 exercise\(s\), 3 attempt\(s\), 2 check\(s\) and 2 exported file\(s\)/)
+  click(q(dialog, '[data-dialog="confirm"]'))
+  await waitFor(() => !q(pane.el, '[data-lw="finished"]') && q(pane.el, '[data-lw="start-form"]'), 'back to empty state')
 })
 
 pane.unmount()

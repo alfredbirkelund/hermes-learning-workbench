@@ -15,18 +15,22 @@ What was run, what it showed, and what was not tested. Everything runs in an iso
 
 ## Results (version 0.2.0)
 
-- **Deterministic:** 44 passed. Covers the learning loop, help labels, quote verification, frozen
-  keys, one open exercise, drafts and conflicts, duplicate and parallel submits, stale writes,
-  contests, route edits, delete, compaction rebinding, lessons, chat help, the schema-1 → 2
-  migration on a real store written by the previous release (`tests/fixtures/store-v1.sql`), and
-  refusal of a store from a newer version.
-- **Mutation:** 17/17 invariants caught (the test suite fails when any one is broken).
-- **Pane harness:** 18/18 steps, including double-click guards, autosave, a two-window draft
-  conflict, chat switching with a late response, Hermes unreachable after a submit, the lesson and
-  the chat-help notice.
-- **Lifecycle:** see `.test-artifacts/lifecycle.txt` from the last run (not committed). The check
-  installs the previous release from a git source, writes learner data with it, moves the source
-  to the candidate and runs `hermes plugins update`, then checks the data and the migration.
+- **Deterministic:** 53 passed. Covers the learning loop, every help label (unaided, after
+  feedback, after hints, after chat help, after reveal), quote verification, frozen keys, one open
+  exercise, drafts and conflicts, duplicate and parallel submits, stale writes, contests, route
+  edits, finishing a study and reaching it again by number, delete (including export files that
+  cannot be removed), two exports in the same second, a busy store, compaction rebinding, lessons,
+  chat help, the schema-1 → 2 migration on a real store written by the previous release
+  (`tests/fixtures/store-v1.sql`), and refusal of a store from a newer version.
+- **Mutation:** 22/22 invariants caught (the test suite fails when any one is broken).
+- **Pane harness:** 19/19 steps, including double-click guards, autosave, a two-window draft
+  conflict, chat switching with a late response, Hermes unreachable after a submit, the lesson,
+  the chat-help notice, and finishing a study, then exporting and deleting it from the finished
+  list.
+- **Lifecycle:** written to `.test-artifacts/lifecycle.txt` (not committed). The check installs the
+  previous release from a git source, writes learner data with it, moves the source to the
+  candidate and runs `hermes plugins update`, then checks the data and the migration, then
+  disable/enable, a forced reinstall, uninstall (data kept) and reinstall (same records back).
 
 ## Live sessions (gpt-6.1-sol through Hermes 0.23.0)
 
@@ -39,8 +43,12 @@ above the question.
 
 **Run 2** (lessons in place) went through diagnosis, a three-step route and nine exercises:
 
-- All three lessons taught the idea on a different case than the check asked about.
-- Help labels matched what happened: after hints, after feedback, after reveal, unaided.
+- No lesson solved its check. Two lessons worked a different case (any start and step; x = 2 for a
+  check at x = 3); the third stated the check's own expression and taught the tools (expanding a
+  square, factoring, when cancelling h is allowed) without doing the simplification.
+- Help labels matched what happened: after hints, after reveal, after chat help, unaided. No
+  attempt in the live runs was *after feedback* (a retry after a check without a hint or reveal);
+  that label is covered by the deterministic tests.
 - A sign error got `partially_correct`, quoting the learner's own wrong reasoning, with the gap
   named ("h is end − start, not its absolute value").
 - After a revealed solution, the tutor asked for a fresh problem before crediting the step.
@@ -52,6 +60,27 @@ above the question.
   message was not counted as chat help for the exercise that was open at the time.
 - The real store from run 1, written by the previous release, was migrated in place by the new
   version: all attempts and checks intact.
+
+## Independent review
+
+Three fresh reviewers (standards, product/spec, security/reliability) read the whole plugin at
+commit `05d1b37` and reported reproducible findings. Fixed since:
+
+- **Finished studies were unreachable** (spec, major): after *Finish*, no button or command reached
+  the study, though the pane promised it stayed exportable. Now the pane lists them under
+  *Finished in this chat* with export and delete, and `/study` lists them by number for
+  `/study export N` and `/study delete N`.
+- **Compaction created a store for people who never studied** (reliability): the
+  `post_compaction` hook now checks first, like the per-turn hook.
+- Error handling: a busy store and export-file failures now get the plugin's own messages in
+  `/study` and the routes; a delete whose export files cannot be removed still deletes and names
+  the files left behind; two exports in the same second no longer share a file name.
+- Two overstated claims in this file were corrected (lessons, *after feedback*).
+- Pane timers now use the SDK's tracked `ctx.setTimeout`.
+
+Judgement calls not changed: label maps kept per door (they are worded differently on purpose; a
+test now checks that every door labels every help class), the six state guards in `lw/core.py`,
+and the size of `lw/core.py`.
 
 ## Not tested
 

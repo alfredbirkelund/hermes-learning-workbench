@@ -3,7 +3,7 @@
 The model proposes (study start, route, exercises, assessments, reference revisions); the learner acts
 (drafts, submissions, hints, reveal, skip, retry, contests, route edits, export, archive, deletion).
 Every function is called either by an agent tool (actor "agent"), by a learner door (actor "learner":
-the Desktop pane's plugin routes or a user-typed /learn command) or by a host hook (actor "host").
+the Desktop pane's plugin routes or a user-typed /study command) or by a host hook (actor "host").
 The actor is fixed by the caller's door and is never read from input.
 
 Exercise states:  awaiting_answer -> awaiting_check -> checked

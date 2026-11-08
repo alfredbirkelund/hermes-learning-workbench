@@ -1,11 +1,15 @@
 """Readable Markdown learning record for one study (the learner's export)."""
 from __future__ import annotations
 
+import logging
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import core, db
+
+logger = logging.getLogger(__name__)
 
 HELP_LABEL = {"unaided": "unaided", "after_feedback": "retry after feedback", "hinted": "after hints",
               "after_chat": "after help in chat while the exercise was open",
@@ -131,14 +135,30 @@ def export_study(conn, study_id: str, *, include_material: bool = False, plugin_
     text = view["material"].pop("text", "") if include_material else ""
     markdown = render(view, material_text=text, plugin_version=plugin_version)
     out_dir = exports_dir()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    path = out_dir / f"{study_id}-{stamp}.md"
-    tmp = path.with_suffix(".md.tmp")
-    tmp.write_text(markdown, encoding="utf-8")
-    tmp.replace(path)
+    path = _reserve_name(out_dir, study_id, datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+    tmp = path.with_name(f".{path.name}.tmp")  # unique, because the reserved name is
+    try:
+        tmp.write_text(markdown, encoding="utf-8")
+        tmp.replace(path)  # atomic: the record is complete or absent
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
+        raise
     with core.write_tx(conn):
         core._event(conn, study_id, "learner", "exported", include_material=bool(include_material), file=path.name)
     return {"study_id": study_id, "path": str(path), "markdown": markdown, "chars": len(markdown)}
+
+
+def _reserve_name(out_dir: Path, study_id: str, stamp: str) -> Path:
+    """Claim a file name nobody else has (O_EXCL), so two exports in the same second never share one."""
+    for n in range(1, 1000):
+        path = out_dir / (f"{study_id}-{stamp}.md" if n == 1 else f"{study_id}-{stamp}-{n}.md")
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666))
+            return path
+        except FileExistsError:
+            continue
+    raise FileExistsError(f"no free export name for {study_id} at {stamp}")
 
 
 def exports_dir() -> Path:
@@ -147,9 +167,20 @@ def exports_dir() -> Path:
     return path
 
 
-def delete_exports(study_id: str) -> int:
-    removed = 0
-    for path in exports_dir().glob(f"{study_id}-*.md"):
-        path.unlink(missing_ok=True)
-        removed += 1
-    return removed
+def delete_exports(study_id: str) -> dict:
+    """Best effort, after the study's rows are gone: remove its export files and name any that stay."""
+    out_dir = db.data_dir() / "exports"
+    try:
+        paths = list(out_dir.glob(f"{study_id}-*.md")) if out_dir.exists() else []
+    except OSError:
+        logger.warning("learning-workbench: could not list %s", out_dir, exc_info=True)
+        return {"removed": 0, "left": [str(out_dir)]}
+    removed, left = 0, []
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+            removed += 1
+        except OSError:
+            logger.warning("learning-workbench: could not remove %s", path, exc_info=True)
+            left.append(str(path))
+    return {"removed": removed, "left": left}
