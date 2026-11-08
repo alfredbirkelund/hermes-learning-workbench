@@ -7,6 +7,16 @@ honest. Your answers are stored exactly as you wrote them. Hints, revealed solut
 for in chat and the tutor's verdicts stay on record. All of it survives restarts, context compaction
 and a closed pane.
 
+![Goal, material and route, with the first diagnostic](docs/screenshots/goal-material-route.png)
+
+| A lesson sits above the check it introduces | The verdict quotes your words and names the gap |
+|---|---|
+| ![Lesson above the check](docs/screenshots/lesson-above-the-check.png) | ![Verdict quoting the learner](docs/screenshots/verdict-quotes-the-learner.png) |
+
+![An exercise with your answer and reasoning, and the export](docs/screenshots/answer-in-your-own-words.png)
+
+Screenshots show an isolated Desktop study of synthetic notes (`tests/fixtures/derivative-notes.md`).
+
 ```
 goal + material → diagnose (≤ 3 questions) → route (2–7 steps, yours to rename/skip)
                          ↓
