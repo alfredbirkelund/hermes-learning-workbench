@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Stop the isolated test gateway only (never the user's host gateway).
+
+Reads <test HERMES_HOME>/gateway.pid, checks that the record names the isolated home and that the
+PID's /proc start time still matches, then sends SIGTERM and waits for exit.
+"""
+import json
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+root = Path(os.environ.get("LW_TEST_ROOT", Path.home() / ".hermes/cache/scratch/hackathon-learning-workbench"))
+home = Path(os.environ.get("LW_HERMES_HOME", root / "hermes-home")).resolve()
+if home == (Path.home() / ".hermes").resolve():
+    sys.exit("refusing: that is the real Hermes home")
+pid_file = home / "gateway.pid"
+if not pid_file.exists():
+    print("no test gateway pid file; nothing to stop")
+    sys.exit(0)
+rec = json.loads(pid_file.read_text())
+pid = int(rec["pid"])
+if Path(rec.get("hermes_home", "")).resolve() != home:
+    sys.exit(f"refusing: pid file names {rec.get('hermes_home')!r}, not the isolated home")
+stat = Path(f"/proc/{pid}/stat")
+if not stat.exists():
+    print(f"test gateway {pid} already gone")
+    sys.exit(0)
+start_ticks = int(stat.read_text().rsplit(")", 1)[1].split()[19])
+if rec.get("start_time") is not None and int(rec["start_time"]) != start_ticks:
+    sys.exit(f"refusing: pid {pid} was recycled (start time differs)")
+os.kill(pid, signal.SIGTERM)
+for _ in range(100):
+    if not stat.exists():
+        print(f"stopped test gateway {pid}")
+        sys.exit(0)
+    time.sleep(0.1)
+sys.exit(f"test gateway {pid} did not exit within 10 s")

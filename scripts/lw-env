@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Run one command inside the isolated test environment, e.g.
+#   scripts/lw-env hermes plugins list
+#   scripts/lw-env --model hermes chat -q "hello"   (adds $LW_MODEL_SECRET, default OPENAI_API_KEY, via with-secrets)
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=testenv.sh
+source "$here/testenv.sh"
+if [[ "${1:-}" == "--model" ]]; then
+  shift
+  exec with-secrets "${LW_MODEL_SECRET:-OPENAI_API_KEY}" -- env HERMES_HOME="$HERMES_HOME" HERMES_GATEWAY_LOCK_DIR="$HERMES_GATEWAY_LOCK_DIR" "$@"
+fi
+exec "$@"

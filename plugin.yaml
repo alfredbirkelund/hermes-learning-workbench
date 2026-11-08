@@ -1,0 +1,19 @@
+name: learning-workbench
+label: Learning Workbench
+version: 0.1.0
+description: "Study with Hermes in a local workbench: bring a goal and material, get a short diagnosis and a small prerequisite route, then answer one exercise at a time in your own words with frozen hints, an explicit solution reveal and checks that must quote your answer. Attempts, help received and verdicts stay on record across restarts."
+author: Alfred Birkelund
+license: MIT
+kind: standalone
+manifest_version: 2
+requires_hermes: ">=0.23.0"
+tags: [learning, education, tutoring, desktop]
+provides_tools:
+  - learning_workbench_start
+  - learning_workbench_get
+  - learning_workbench_propose_plan
+  - learning_workbench_propose_exercise
+  - learning_workbench_assess
+  - learning_workbench_revise_reference
+provides_hooks:
+  - post_compaction

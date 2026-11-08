@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Launch a SEPARATE packaged Hermes Desktop for Learning Workbench tests.
+#  - own HERMES_HOME (isolated test home) and own Electron userData dir (own single-instance lock)
+#  - own gateway-lock dir, so its backend never attaches to the user's host gateway
+#  - basic password store, so nothing is written to the user's OS keyring
+#  - DevTools protocol on a free port (recorded in $LW_TEST_ROOT/desktop-cdp-port)
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=testenv.sh
+source "$here/testenv.sh"
+
+runtime="${LW_HERMES_RUNTIME:-$HOME/.hermes/hermes-agent}"
+app="${LW_DESKTOP_APP:-/opt/hermes-desktop/Hermes}"
+rc="$("$runtime/.hermes/bin/hermes" --print-runtime-command)"
+store_python="$(/usr/bin/python3 -c 'import json,sys; print(json.loads(sys.argv[1])[0])' "$rc")"
+venv_python="$("$store_python" -I -c '
+import sys; from pathlib import Path
+r = Path(sys.argv[1]); sys.path.insert(0, str(r))
+from pm.environments import committed_venv
+e = committed_venv(r); print(e / "bin/python" if e else "")' "$runtime")"
+[[ -x "$venv_python" ]] || { echo "no committed Hermes venv python found" >&2; exit 1; }
+
+port="${LW_CDP_PORT:-$(/usr/bin/python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')}"
+echo "$port" > "$LW_TEST_ROOT/desktop-cdp-port"
+mkdir -p "$LW_TEST_ROOT/desktop-cwd"
+
+export HERMES_DESKTOP_USER_DATA_DIR="$LW_DESKTOP_USER_DATA"
+export HERMES_DESKTOP_HERMES_ROOT="$runtime"
+export HERMES_DESKTOP_PYTHON="$venv_python"
+export HERMES_DESKTOP_CWD="$LW_TEST_ROOT/desktop-cwd"
+export HERMES_DESKTOP_PASSWORD_STORE=basic
+unset ELECTRON_RUN_AS_NODE PYTHONPATH PYTHONHOME
+
+echo "[lw-desktop] HERMES_HOME=$HERMES_HOME"
+echo "[lw-desktop] userData=$HERMES_DESKTOP_USER_DATA_DIR"
+echo "[lw-desktop] gateway locks=$HERMES_GATEWAY_LOCK_DIR"
+echo "[lw-desktop] CDP port=$port"
+exec "$app" --disable-setuid-sandbox --ozone-platform=wayland --password-store=basic \
+  --remote-debugging-port="$port" --remote-allow-origins='*' "$@"

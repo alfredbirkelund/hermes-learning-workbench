@@ -28,7 +28,7 @@ This file is the review baseline for product and spec review.
 
 ## Keep / cut
 
-Keep: study bound to its chat with material provenance; route list whose old steps keep their attempts; draft autosave and idempotent submit; attempt help class (unaided, hinted, retry after feedback, after reveal); verdict revisions and learner contests; export; delete one study; `/learn` text fallback without UI parity.
+Keep: study bound to its chat with material provenance; route list whose old steps keep their attempts; draft autosave and idempotent submit; attempt help class (unaided, hinted, retry after feedback, after reveal); verdict revisions and learner contests; export; delete one study; `/study` text fallback without UI parity.
 
 Cut or defer in v1: scheduling, spaced repetition, flashcards; graph canvas and drag-and-drop planning; knowledge graph and cross-lesson retrieval; a file-import UI; on-demand generated hints; LaTeX rendering inside the pane; extra model calls; mastery scores or badges; voice; code execution; a bundled skill.
 
@@ -37,7 +37,7 @@ Cut or defer in v1: scheduling, spaced repetition, flashcards; graph canvas and 
 One installable folder with two doors and one store:
 
 - Agent tools (stamped `agent`): start, get, propose_plan, propose_exercise, assess, revise_reference.
-- Learner actions (pane routes via host-authenticated `ctx.rest`, or user-typed `/learn`; stamped `learner`): submit, draft, hint, reveal, skip, retry, contest, edit route, export, delete.
+- Learner actions (pane routes via host-authenticated `ctx.rest`, or user-typed `/study`; stamped `learner`): submit, draft, hint, reveal, skip, retry, contest, edit route, export, delete.
 - Core (plain Python + sqlite3): the runtime owns ids, transitions, versions and persistence in `<HERMES_HOME>/plugin-data/learning-workbench/data.db`. Drafts never reach the model.
 - Pane: Desktop SDK only. It starts the tutor's turn through the same `prompt.submit` RPC that the Desktop composer uses (`host.composer.submit` when a newer Desktop has it).
 
