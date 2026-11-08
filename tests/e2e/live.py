@@ -215,6 +215,8 @@ def show(study: dict | None) -> None:
     if ex:
         print(f"exercise {ex['sequence']} · {ex['kind']} · {ex['state']} · hints {ex['hints_shown']}/{ex['hints_total']}"
               f"{' · solution revealed' if ex['solution_revealed'] else ''}")
+        if ex.get("lesson"):
+            print("  lesson:", ex["lesson"].replace("\n", "\n          "))
         print("  prompt:", ex["prompt"])
         for h in ex["hints"]:
             print("  hint:", h)
@@ -260,6 +262,8 @@ def review() -> None:
         refs = conn.execute("SELECT revision, reference_answer, rubric FROM exercise_references WHERE exercise_id = ? "
                             "ORDER BY revision", (ex["exercise_id"],)).fetchall()
         print(f"## exercise {ex['sequence']} · {ex['kind']} · {ex['state']} · step: {ex['step_title'] or '-'}")
+        if ex.get("lesson"):
+            print("   lesson:", ex["lesson"].replace("\n", " ⏎ ")[:1500])
         print("   prompt:", ex["prompt"].replace("\n", " ")[:400])
         for rev, ref, rubric in refs:
             print(f"   key r{rev}: {ref.replace(chr(10), ' ')[:300]} || rubric: {rubric.replace(chr(10), ' ')[:300]}")

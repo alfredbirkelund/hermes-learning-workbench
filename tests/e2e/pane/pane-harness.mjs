@@ -45,6 +45,11 @@ async function agent(tool, args, session = 'chat-A') {
     body: JSON.stringify({ session_id: session, args }) })
   return res.json()
 }
+async function chatTurn(session = 'chat-A') { // the learner sends a chat message: Hermes runs pre_llm_call first
+  const res = await fetch(`${BASE}/__chat_turn`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ session_id: session }) })
+  return (await res.json()).result
+}
 const clipboard = []
 function mount() {
   let contribution
@@ -205,7 +210,7 @@ await step('switching chats never shows the previous chat’s study, even with a
   await waitFor(() => q(pane.el, '[data-lw="goal-text"]'), 'chat A study back')
 })
 
-await step('when Hermes cannot be asked, the attempt stays saved and the pane says so', async () => {
+await step('a new check shows its lesson above the question', async () => {
   const view = (await agent('learning_workbench_get', {})).study
   const attempt = view.exercises[0].attempts.at(-1)
   await agent('learning_workbench_assess', { study_id: view.study_id, attempt_id: attempt.attempt_id, verdict: 'correct',
@@ -220,6 +225,19 @@ await step('when Hermes cannot be asked, the attempt stays saved and the pane sa
   changed()
   await waitFor(() => q(pane.el, '[data-lw="prompt"]')?.textContent.startsWith('Simplify'), 'new exercise')
   assert.equal(q(pane.el, '[data-lw="lesson"]')?.textContent, 'LessonDivide every term by h first.\n\nOnly then let h shrink towards 0.')
+  assert.equal(q(pane.el, '[data-lw="chat-help"]'), null)
+})
+
+await step('asking in chat while the exercise is open is noted in the pane and labels the answer', async () => {
+  const out = await chatTurn()
+  assert.match(out.context, /Exercise \d+ \(check\) is open/)
+  assert.match(out.context, /Do not solve it/)
+  assert.equal(await chatTurn('chat-B'), null)
+  changed()
+  await waitFor(() => q(pane.el, '[data-lw="chat-help"]'), 'chat-help notice')
+})
+
+await step('when Hermes cannot be asked, the attempt stays saved and the pane says so', async () => {
   host.failRequests = true
   type(q(pane.el, '[data-lw="answer"]'), '2x + h')
   click(q(pane.el, '[data-lw="submit"]'))
@@ -227,6 +245,7 @@ await step('when Hermes cannot be asked, the attempt stays saved and the pane sa
   host.failRequests = false
   const v4 = (await agent('learning_workbench_get', {})).study
   assert.equal(v4.exercises.at(-1).attempts.length, 1)
+  assert.equal(v4.exercises.at(-1).attempts[0].help_class, 'after_chat')
   click(q(pane.el, '[data-lw="ask-again"]'))
   await waitFor(() => q(pane.el, '[data-lw-send="sent"]'), 'sent after ask again')
 })

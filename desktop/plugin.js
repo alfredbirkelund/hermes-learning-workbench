@@ -63,7 +63,7 @@ const T = {
   quote: { borderLeft: '2px solid var(--ui-stroke-secondary)', paddingLeft: 8, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
 }
 
-const HELP = { unaided: 'unaided', after_feedback: 'after feedback', hinted: 'after hints', after_reveal: 'after reveal' }
+const HELP = { unaided: 'unaided', after_feedback: 'after feedback', hinted: 'after hints', after_chat: 'after chat help', after_reveal: 'after reveal' }
 const VERDICT = {
   correct: ['Correct', 'success'], partially_correct: ['Partly correct', 'warn'],
   incorrect: ['Not yet', 'destructive'], cannot_judge: ['Could not judge', 'muted'],
@@ -410,6 +410,11 @@ function ExerciseCard({ ctx, study, exercise, draft, onChanged, onError, sendToT
             canReveal ? h(Button, { variant: 'ghost', onClick: () => setRevealOpen(true), 'data-lw': 'reveal' }, 'Reveal solution…') : null,
             h(Button, { variant: 'ghost', onClick: () => action('skip', null, () => sendToTutor(`[Learning Workbench] I skipped exercise ${exercise.sequence}.`)), 'data-lw': 'skip' }, 'Skip'),
             h('span', { style: { ...T.faint, fontSize: '0.75rem' }, 'data-lw-save': save.phase, role: save.phase === 'failed' ? 'alert' : undefined }, save.message)),
+          exercise.chat_turns_while_open > 0
+            ? h('div', { style: { ...T.muted, fontSize: '0.8rem' }, 'data-lw': 'chat-help' },
+                'You asked Hermes in chat while this exercise was open, so your answer will be recorded as made after chat help.')
+            : h('div', { style: { ...T.faint, fontSize: '0.75rem' } },
+                'Hints, the solution and questions to Hermes in chat while this is open are recorded with your answer.'),
           submit.phase === 'failed' ? h('div', { role: 'alert', 'data-lw-submit': 'failed' }, submit.message) : null)
       : null,
     waiting

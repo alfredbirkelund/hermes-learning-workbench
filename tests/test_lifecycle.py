@@ -18,7 +18,7 @@ def test_plugin_registers_its_tools_hook_and_command(env):
     assert sorted(env.tool_names()) == sorted([
         "learning_workbench_start", "learning_workbench_get", "learning_workbench_propose_plan",
         "learning_workbench_propose_exercise", "learning_workbench_assess", "learning_workbench_revise_reference"])
-    assert "post_compaction" in loaded.hooks_registered
+    assert "post_compaction" in loaded.hooks_registered and "pre_llm_call" in loaded.hooks_registered
     assert "study" in env.manager._plugin_commands
 
 

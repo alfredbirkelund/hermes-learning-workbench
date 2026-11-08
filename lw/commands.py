@@ -19,7 +19,7 @@ USAGE = (
     "skip | retry | contest <why> | export [with-material] | finish | delete"
 )
 HELP_LABEL = {"unaided": "unaided", "after_feedback": "after feedback", "hinted": "after hints",
-              "after_reveal": "after reveal"}
+              "after_chat": "after chat help", "after_reveal": "after reveal"}
 
 
 def _split_answer(text: str) -> tuple[str, str]:

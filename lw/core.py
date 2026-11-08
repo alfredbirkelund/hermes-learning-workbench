@@ -52,7 +52,7 @@ EXERCISE_KINDS = ("diagnostic", "check", "practice")
 REASONING_MODES = ("optional", "requested")
 VERDICTS = ("correct", "partially_correct", "incorrect", "cannot_judge")
 OPEN_STATES = ("awaiting_answer", "awaiting_check")
-HELP_CLASSES = ("unaided", "after_feedback", "hinted", "after_reveal")
+HELP_CLASSES = ("unaided", "after_feedback", "hinted", "after_chat", "after_reveal")
 ROUTE_OPS = ("rename", "skip", "restore")
 
 
@@ -250,10 +250,14 @@ def _help_class(conn, exercise_id: str) -> tuple[str, int, bool, bool]:
     hints_seen = _count(conn, "SELECT COUNT(*) FROM events WHERE exercise_id = ? AND kind = 'hint_shown'", (exercise_id,))
     solution_seen = _count(conn, "SELECT COUNT(*) FROM events WHERE exercise_id = ? AND kind = 'solution_revealed'",
                            (exercise_id,)) > 0
+    chat_seen = _count(conn, "SELECT COUNT(*) FROM events WHERE exercise_id = ? AND kind = 'chat_while_open'",
+                       (exercise_id,)) > 0
     feedback_seen = _count(conn, "SELECT COUNT(*) FROM assessments s JOIN attempts a ON a.id = s.attempt_id "
                                  "WHERE a.exercise_id = ?", (exercise_id,)) > 0
     if solution_seen:
         cls = "after_reveal"
+    elif chat_seen:  # chat help is unbounded (it may have included the answer), so it outranks a frozen hint
+        cls = "after_chat"
     elif hints_seen:
         cls = "hinted"
     elif feedback_seen:
@@ -261,6 +265,33 @@ def _help_class(conn, exercise_id: str) -> tuple[str, int, bool, bool]:
     else:
         cls = "unaided"
     return cls, hints_seen, solution_seen, feedback_seen
+
+
+def _open_for_chat(conn, session_id: str) -> Optional[tuple[str, sqlite3.Row]]:
+    study = active_study_for_session(conn, session_id)
+    if study is None:
+        return None
+    ex = conn.execute("SELECT id, sequence, kind, prompt FROM exercises WHERE study_id = ? AND state = 'awaiting_answer' "
+                      "ORDER BY sequence DESC LIMIT 1", (study["id"],)).fetchone()
+    return (study["id"], ex) if ex is not None else None
+
+
+def note_chat_turn(conn, *, session_id: str) -> Optional[dict]:
+    """A chat turn is starting while this chat's study has an exercise waiting for the learner's own answer.
+
+    Records it, so the next attempt counts as made after chat help (whatever the tutor replies, the plugin cannot
+    see it), and returns what the agent must be reminded of this turn. No study revision bump: nothing the agent
+    may write depends on it, and a bump would make its next write fail as stale for no reason."""
+    if _open_for_chat(conn, session_id) is None:  # cheap read first; most turns have no open exercise
+        return None
+    with write_tx(conn):
+        found = _open_for_chat(conn, session_id)
+        if found is None:
+            return None
+        study_id, ex = found
+        _event(conn, study_id, "learner", "chat_while_open", ex["id"])
+    return {"study_id": study_id, "exercise_id": ex["id"], "sequence": ex["sequence"], "kind": ex["kind"],
+            "prompt": ex["prompt"]}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -874,8 +905,8 @@ def study_view(conn, study_id: str, *, audience: str) -> dict:
     attempts = _rows(conn, "SELECT * FROM attempts WHERE study_id = ? ORDER BY exercise_id, number", (study_id,))
     assessments = _rows(conn, "SELECT * FROM assessments WHERE study_id = ? ORDER BY attempt_id, revision", (study_id,))
     contests = _rows(conn, "SELECT * FROM contests WHERE study_id = ? ORDER BY created_at", (study_id,))
-    events = _rows(conn, "SELECT * FROM events WHERE study_id = ? AND kind IN ('hint_shown','solution_revealed') "
-                         "ORDER BY seq", (study_id,))
+    events = _rows(conn, "SELECT * FROM events WHERE study_id = ? "
+                         "AND kind IN ('hint_shown','solution_revealed','chat_while_open') ORDER BY seq", (study_id,))
     answered = {s["responds_to_contest_id"] for s in assessments if s["responds_to_contest_id"]}
     by_attempt: dict[str, list[dict]] = {}
     for s in assessments:
@@ -894,13 +925,15 @@ def study_view(conn, study_id: str, *, audience: str) -> dict:
         hints = json.loads(ex["hints_json"])
         shown = sum(1 for e in events if e["exercise_id"] == ex["id"] and e["kind"] == "hint_shown")
         revealed = any(e["exercise_id"] == ex["id"] and e["kind"] == "solution_revealed" for e in events)
+        chats = sum(1 for e in events if e["exercise_id"] == ex["id"] and e["kind"] == "chat_while_open")
         ref = _latest_reference(conn, ex["id"])
         item = {
             "exercise_id": ex["id"], "sequence": ex["sequence"], "kind": ex["kind"], "step_id": ex["step_id"],
             "step_title": ex["step_title"], "prompt": ex["prompt"], "lesson": ex["lesson"],
             "reasoning": ex["reasoning_mode"],
             "state": ex["state"], "created_at": ex["created_at"], "hints_total": len(hints),
-            "hints_shown": shown, "solution_revealed": revealed, "reference_revision": ref["revision"],
+            "hints_shown": shown, "solution_revealed": revealed, "chat_turns_while_open": chats,
+            "reference_revision": ref["revision"],
             "attempts": [],
         }
         if audience == "agent":

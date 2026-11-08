@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from . import core, db
 
@@ -345,7 +345,43 @@ TOOLS = [
 ]
 
 
+def chat_guard_context(open_ex: dict) -> str:
+    """Per-turn note for the agent while the learner's exercise is open (injected into this turn's user message)."""
+    prompt = open_ex["prompt"] if len(open_ex["prompt"]) <= 400 else open_ex["prompt"][:400] + "…"
+    return (
+        f"[Learning Workbench] Exercise {open_ex['sequence']} ({open_ex['kind']}) is open in the learner's Workbench "
+        f"pane, waiting for their own answer:\n«{prompt}»\n"
+        "Do not solve it or state its result in chat, even if asked: the answer must stay theirs. Help without "
+        "solving it: explain the idea on a different example, ask a guiding question, or point to the pane's hints. "
+        "If they want the full solution, ask them to press “Reveal solution” in the pane, where it is recorded. "
+        "This chat turn is recorded: their next answer to this exercise counts as made after chat help.")
+
+
+def _on_pre_llm_call(session_id: str = "", **_: Any) -> Optional[dict]:
+    """Steer and record chat help while an exercise is open. Fires on every turn of every chat: creates nothing
+    for people who never study, and never fails the turn."""
+    if not session_id:
+        return None
+    conn = None
+    try:
+        if not db.store_exists():
+            return None
+        conn = db.connect()
+        open_ex = core.note_chat_turn(conn, session_id=session_id)
+        if open_ex is None:
+            return None
+        broadcast(open_ex["study_id"])
+        return {"context": chat_guard_context(open_ex)}
+    except Exception:
+        logger.exception("learning-workbench: pre_llm_call failed; this turn is not steered")
+        return None
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def register(ctx) -> None:
+    ctx.register_hook("pre_llm_call", _on_pre_llm_call)
     for schema, fn in TOOLS:
         ctx.register_tool(name=schema["name"], toolset=TOOLSET, schema=schema, handler=_tool(schema, fn),
                           description=schema["description"].split(". ")[0] + ".")

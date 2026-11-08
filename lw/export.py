@@ -8,6 +8,7 @@ from pathlib import Path
 from . import core, db
 
 HELP_LABEL = {"unaided": "unaided", "after_feedback": "retry after feedback", "hinted": "after hints",
+              "after_chat": "after help in chat while the exercise was open",
               "after_reveal": "after the solution was revealed"}
 VERDICT_LABEL = {"correct": "correct", "partially_correct": "partly correct", "incorrect": "not yet correct",
                  "cannot_judge": "could not judge"}

@@ -17,3 +17,4 @@ provides_tools:
   - learning_workbench_revise_reference
 provides_hooks:
   - post_compaction
+  - pre_llm_call

@@ -230,3 +230,11 @@ def data_dir() -> Path:
     from plugins.plugin_storage import plugin_data_dir
 
     return plugin_data_dir(PLUGIN_NAME)
+
+
+def store_exists() -> bool:
+    """Whether this profile has a store yet. Creates nothing: hooks that fire on every chat turn check this first,
+    so people who never study get no plugin files."""
+    from hermes_constants import get_hermes_home
+
+    return (get_hermes_home() / "plugin-data" / PLUGIN_NAME / "data.db").exists()

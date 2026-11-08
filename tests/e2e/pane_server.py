@@ -44,6 +44,10 @@ def main() -> None:
         raw = handlers[tool](body.get("args") or {}, session_id=body.get("session_id", ""))
         return json.loads(raw)
 
+    @app.post("/__chat_turn")
+    def chat_turn(body: dict = Body(...)):  # the plugin's real pre_llm_call hook, as Hermes calls it each turn
+        return {"result": tools._on_pre_llm_call(session_id=body.get("session_id", ""))}
+
     @app.get("/__events")
     def get_events():
         return {"events": events}
