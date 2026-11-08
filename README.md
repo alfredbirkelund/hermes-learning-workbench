@@ -139,10 +139,12 @@ by what was said: a chat turn about something else while an exercise is open sti
 Tested with Hermes Agent 0.23.0 (source `2bd378ed1b8d`) on Linux: the plugin's backend, tools,
 hooks and `/study` in deterministic tests; full study sessions against a real `hermes serve` with a
 real model; the pane's code in React/jsdom against the real backend; install, update from the
-previous release, disable, reinstall and uninstall in a fresh Hermes home. **Not yet checked by
-hand in the Hermes Desktop window.** Not tested: macOS and Windows, remote/OAuth gateways (the pane
-polls, so it should work without the event socket), messaging platforms beyond `/study` in the CLI.
-See [docs/TESTING.md](docs/TESTING.md) for what was run and what was not.
+previous release, disable, reinstall and uninstall in a fresh Hermes home; and a full study session
+by hand in a Hermes Desktop v0.23.0 build (isolated home and app data), including a restart with a
+draft, the reveal dialog and the export. Not tested: macOS and Windows, Desktop releases other than
+that v0.23.0 build, remote/OAuth gateways (the pane polls, so it should work without the event
+socket), messaging platforms beyond `/study` in the CLI, and models other than `gpt-6.1-sol` for the
+live sessions. See [docs/TESTING.md](docs/TESTING.md) for what was run and what was not.
 
 ## Development
 

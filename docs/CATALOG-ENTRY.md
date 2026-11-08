@@ -1,7 +1,7 @@
 # Catalog submission draft: Learning Workbench
 
-Status: DRAFT. Not submitted. Needs Alfred's approval to publish the repository and open the PR.
-Fill `sha` with the full 40-character release commit after the repository is public, and re-run
+Status: DRAFT. Not submitted. The repository is public; still to do before the PR: add Desktop pane
+screenshots, then pin `sha` to the final full 40-character release commit and re-run
 `hermes plugins validate <checkout> --install-deps` on that exact commit.
 
 ## plugin-catalog/learning-workbench.yaml
