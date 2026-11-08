@@ -182,6 +182,8 @@ def env(tmp_path, monkeypatch, events):
     (home / "config.yaml").write_text(f"plugins:\n  enabled:\n    - {PLUGIN}\n", encoding="utf-8")
     bundled = tmp_path / "bundled"
     bundled.mkdir()
+    for key in [k for k in os.environ if k.startswith("HERMES_")]:  # hermetic: no parent-session leakage
+        monkeypatch.delenv(key)
     monkeypatch.setenv("HOME", str(tmp_path / "os-home"))
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setenv("HERMES_BUNDLED_PLUGINS", str(bundled))

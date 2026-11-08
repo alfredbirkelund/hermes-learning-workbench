@@ -13,6 +13,7 @@ cp "$repo/tests/e2e/pane/sdk-stub.mjs" "$repo/tests/e2e/pane/pane-harness.mjs" "
 sed "s#from '@hermes/plugin-sdk'#from './sdk-stub.mjs'#" "$repo/desktop/plugin.js" > "$work/plugin.mjs"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/lw-pane-home.XXXXXX")"
 log="$work/server.log"
+for v in $(compgen -e | grep '^HERMES_' || true); do unset "$v"; done  # hermetic server environment
 PYTHONPATH="$runtime" HOME="$scratch/os-home" python3 "$repo/tests/e2e/pane_server.py" "$scratch/hermes-home" > "$log" 2>&1 &
 server=$!
 cleanup() {

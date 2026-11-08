@@ -18,6 +18,10 @@
 
 : "${LW_TEST_ROOT:=$HOME/.hermes/cache/scratch/hackathon-learning-workbench}"
 export LW_TEST_ROOT
+# Hermetic: drop every HERMES_* variable inherited from the calling session (a parent agent exports its
+# session id, profile pin, real home and more), then set only the test ones below.
+for _lw_var in $(compgen -e | grep '^HERMES_' || true); do unset "$_lw_var"; done
+unset _lw_var
 if [[ -z "${LW_PYTHON:-}" ]]; then
   _lw_runtime="${LW_HERMES_RUNTIME:-$HOME/.hermes/hermes-agent}"
   _lw_rc="$(env -u HERMES_HOME -u HERMES_DATA_DIR_SUFFIX "$_lw_runtime/.hermes/bin/hermes" --print-runtime-command)"
