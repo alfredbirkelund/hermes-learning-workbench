@@ -53,7 +53,7 @@ model. They are proposals, not grades.
 ## Install
 
 ```bash
-hermes plugins install <owner>/hermes-learning-workbench --enable
+hermes plugins install alfredbirkelund/hermes-learning-workbench --enable
 ```
 
 Then turn the pane on in Hermes Desktop under **Capabilities → Plugins → Learning Workbench**.
