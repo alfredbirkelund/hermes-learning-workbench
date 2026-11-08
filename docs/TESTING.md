@@ -82,9 +82,30 @@ Judgement calls not changed: label maps kept per door (they are worded different
 test now checks that every door labels every help class), the six state guards in `lw/core.py`,
 and the size of `lw/core.py`.
 
+## Hermes Desktop (v0.23.0, by hand)
+
+Hermes Desktop built from the `v0.23.0` tag, isolated home and app data, gpt-6.1-sol, a 1920×1080
+window. (The Desktop package on the test machine is v0.21.1, which predates unified plugin panes: it
+does not copy the package's desktop half into `desktop-plugins/`, so there is no pane; `/study`
+still works there.)
+
+- The installed package appeared under **Capabilities → Plugins** as *Off*; one switch turned on
+  both halves, and the pane opened in the right sidebar.
+- A chat request with pasted notes started a study. The pane showed the diagnosis, then the route,
+  a lesson and a check. A wrong claim got *Partly correct*, quoting the sentence and naming the gap;
+  **Try again** plus a hint led to *Correct*, and the tutor then posed a fresh practice problem.
+- Asked in chat for the answer, the tutor pointed to **Reveal solution** and gave a nudge; the pane
+  noted the chat help.
+- With a draft typed, the Desktop and its gateway were stopped and started again: same chat, same
+  exercise, the unsent draft and the notice were back.
+- Export and the reveal dialog (the host's `ConfirmDialog`) rendered as intended.
+
+Found and fixed here: the route list pushed the lesson and question below the fold (the route now
+folds to one line while an exercise is open, and a new exercise scrolls into view); "Sent to Hermes."
+stayed after the reply; the export notice showed a long path (now the file name, path on hover).
+
 ## Not tested
 
-- **The Hermes Desktop window itself.** The pane's logic is tested in jsdom against the real
-  backend; it has not been clicked through by hand in the packaged Desktop yet.
-- macOS and Windows; remote or OAuth gateways; messaging platforms beyond `/study` in the CLI.
+- macOS and Windows; packaged Desktop releases other than the v0.23.0 build above; remote or
+  OAuth gateways; messaging platforms beyond `/study` in the CLI.
 - Other models than gpt-6.1-sol for the live sessions.

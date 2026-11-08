@@ -56,9 +56,10 @@ model. They are proposals, not grades.
 hermes plugins install alfredbirkelund/hermes-learning-workbench --enable
 ```
 
-Then turn the pane on in Hermes Desktop under **Capabilities → Plugins → Learning Workbench**.
-The Desktop half of a unified plugin is opt-in. Requires Hermes `>= 0.23.0`. No Python
-dependencies, no accounts, no network calls of its own.
+Then, in Hermes Desktop, open **Capabilities → Plugins**, find **Learning Workbench** and turn it
+on; the pane opens in the right sidebar. The Desktop half of a unified plugin is opt-in, and it needs
+a Desktop with unified plugin panes (v0.23 or later); `/study` works everywhere. Requires Hermes
+`>= 0.23.0`. No Python dependencies, no accounts, no network calls of its own.
 
 ## Quick start
 

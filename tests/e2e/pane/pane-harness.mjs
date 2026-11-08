@@ -248,6 +248,12 @@ await step('when Hermes cannot be asked, the attempt stays saved and the pane sa
   assert.equal(v4.exercises.at(-1).attempts[0].help_class, 'after_chat')
   click(q(pane.el, '[data-lw="ask-again"]'))
   await waitFor(() => q(pane.el, '[data-lw-send="sent"]'), 'sent after ask again')
+  // The notice is about the turn it started: once that turn ends, it goes.
+  host.state.busyBySession.set({ 'runtime-A': true })
+  await new Promise(r => setTimeout(r, 50))
+  assert.ok(q(pane.el, '[data-lw-send="sent"]'), 'still shown while Hermes replies')
+  host.state.busyBySession.set({})
+  await waitFor(() => !q(pane.el, '[data-lw-send="sent"]'), 'sent notice cleared when the turn ends')
 })
 
 await step('a Desktop with host.composer sends through the chat composer when idle, else queued prompt.submit', async () => {
@@ -267,6 +273,10 @@ await step('a Desktop with host.composer sends through the chat composer when id
 })
 
 await step('route edits from the pane are recorded as the learner’s', async () => {
+  // With an exercise open the route is folded to one line; the learner unfolds it to edit.
+  const summary = await waitFor(() => q(pane.el, '[data-lw="route-summary"]'), 'folded route summary')
+  assert.match(summary.textContent, /^(Step \d+ of \d+ · .+|\d+ steps?)$/)
+  click(q(pane.el, '[data-lw="route-toggle"]'))
   const stepEl = await waitFor(() => qa(pane.el, '[data-lw="route"] li')[0], 'route rendered')
   click(byText(stepEl, 'button', 'Skip'))
   await waitFor(() => byText(qa(pane.el, '[data-lw="route"] li')[0], 'button', 'Restore'), 'restore offered')

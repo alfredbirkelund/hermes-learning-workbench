@@ -175,6 +175,24 @@ function RouteList({ ctx, study, onChanged, onError }) {
       `${step.title} (removed from the route; ${step.evidence.attempts} attempt(s) kept)`)))
 }
 
+// While an exercise is open the route folds to one line, so the lesson and the question stay in view.
+function RouteSection({ ctx, study, current, onChanged, onError }) {
+  const [open, setOpen] = useState(false)
+  const route = study.route
+  const list = h(RouteList, { ctx, study, onChanged, onError })
+  if (!route || !current) return h('div', { style: T.section }, h(Label, null, 'Route'), list)
+  const live = route.steps.filter(s => s.status !== 'skipped')
+  const at = live.findIndex(s => s.step_id === current.step_id)
+  const summary = at >= 0 ? `Step ${at + 1} of ${live.length} · ${live[at].title}` : `${live.length} step${live.length === 1 ? '' : 's'}`
+  return h('div', { style: T.section },
+    h(Row, null,
+      h(Label, null, 'Route'),
+      h('span', { style: { ...T.muted, flex: 1, minWidth: 0, fontSize: '0.8rem' }, 'data-lw': 'route-summary' }, summary),
+      h(Button, { size: 'xs', variant: 'ghost', 'data-lw': 'route-toggle', 'aria-expanded': open ? 'true' : 'false',
+                  onClick: () => setOpen(!open) }, open ? 'Hide' : 'Show')),
+    open ? list : null)
+}
+
 // ---------------------------------------------------------------------------------------------
 // checks (verdicts) and contests
 // ---------------------------------------------------------------------------------------------
@@ -221,7 +239,10 @@ function Verdicts({ ctx, study, exercise, attempt, onChanged, sendToTutor }) {
         h('div', { style: { ...T.muted, fontSize: '0.78rem' } }, 'Quoted from your answer:'),
         h('div', { style: T.quote }, `“${s.evidence_quote}”`),
         h('div', { style: T.text }, s.explanation),
-        s.gap ? h('div', { style: T.text }, h('span', { style: T.muted }, 'Gap: '), s.gap) : null)
+        s.gap
+          ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }, 'data-lw': 'gap' },
+              h('span', { style: T.label }, 'Gap'), h('div', { style: T.text }, s.gap))
+          : null)
     }),
     attempt.contests.map(c => h('div', { key: c.contest_id, style: { ...T.muted, fontSize: '0.8rem' } },
       `You contested this check${c.answered ? '' : ' (waiting for the tutor)'}: “${c.text}”`)),
@@ -392,6 +413,7 @@ function ExerciseCard({ ctx, study, exercise, draft, onChanged, onError, sendToT
       ? h(Fragment, null,
           h(Label, { htmlFor: 'lw-answer' }, 'Your answer'),
           h(Textarea, { id: 'lw-answer', ref: answerRef, value: answer, rows: 4, spellCheck: true, 'data-lw': 'answer',
+                        placeholder: 'In your own words. Ctrl+Enter submits.',
                         onChange: e => edit(e.target.value, reasoning), onKeyDown: keyDown,
                         onBlur: () => { if (dirty.current) saveNow(answer, reasoning) } }),
           h(Label, { htmlFor: 'lw-reasoning' }, reasoningLabel),
@@ -510,7 +532,8 @@ function StudyActions({ ctx, study, onChanged, onError, onDeleted, compact = fal
       h(Button, { size: 'xs', variant: 'ghost', onClick: askDelete, 'data-lw': 'delete' }, 'Delete…')),
     exported
       ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, 'data-lw': 'exported' },
-          h('div', { style: { ...T.muted, fontSize: '0.78rem', overflowWrap: 'anywhere' } }, `Saved Markdown record: ${exported.path}`),
+          h('div', { style: { ...T.muted, fontSize: '0.78rem', overflowWrap: 'anywhere' }, title: exported.path },
+            `Saved Markdown record: ${exported.path.split(/[\\/]/).pop()}`),
           h(Row, null,
             ctx.os && ctx.os.revealPath ? h(Button, { size: 'xs', variant: 'ghost', onClick: () => ctx.os.revealPath(exported.path) }, 'Show file') : null,
             ctx.os && ctx.os.writeClipboard ? h(Button, { size: 'xs', variant: 'ghost', onClick: () => ctx.os.writeClipboard(exported.markdown) }, 'Copy Markdown') : null))
@@ -627,6 +650,27 @@ function Workbench({ ctx }) {
   const onError = msg => setNotice(msg)
   const onFinishedDeleted = msg => { setNotice(msg || 'Study deleted.'); load() }
   const study = view.study
+
+  // "Sent to Hermes." is news only until that turn ends; failures (unsent) stay until the learner acts.
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    if (wasBusy.current && !tutorBusy) setSendState(s => (s.phase === 'sent' ? { phase: 'idle', message: '' } : s))
+    wasBusy.current = tutorBusy
+  }, [tutorBusy])
+
+  // A new exercise scrolls to the top of the pane, so its lesson and question are what the learner sees.
+  const rootRef = useRef(null)
+  const shownExercise = useRef(null)
+  const currentId = study ? (study.open_exercise_id || study.latest_exercise_id || null) : null
+  useEffect(() => {
+    if (!currentId || currentId === shownExercise.current) return
+    shownExercise.current = currentId
+    const root = rootRef.current
+    const card = root && root.querySelector('[data-lw="exercise"]')
+    if (!card) return
+    root.scrollTop = Math.max(0, card.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - 8)
+  }, [currentId])
+
   const finished = h(FinishedStudies, { ctx, studies: view.earlier, onChanged: load, onError, onDeleted: onFinishedDeleted })
 
   let body
@@ -652,7 +696,7 @@ function Workbench({ ctx }) {
         study.material.chars
           ? h('div', { style: { ...T.faint, fontSize: '0.75rem' } }, `Material: ${study.material.title} · ${study.material.chars.toLocaleString()} characters`)
           : null),
-      h('div', { style: T.section }, h(Label, null, 'Route'), h(RouteList, { ctx, study, onChanged: load, onError })),
+      h(RouteSection, { key: study.study_id, ctx, study, current, onChanged: load, onError }),
       h('div', { style: T.section },
         current
           ? h(ExerciseCard, { key: current.exercise_id, ctx, study, exercise: current,
@@ -665,7 +709,7 @@ function Workbench({ ctx }) {
       finished)
   }
 
-  return h('div', { 'data-lw-root': '1', style: { display: 'flex', flexDirection: 'column', gap: 12, padding: 12, height: '100%', overflowY: 'auto', fontSize: '0.875rem', color: 'var(--ui-text-primary)' } },
+  return h('div', { ref: rootRef, 'data-lw-root': '1', style: { display: 'flex', flexDirection: 'column', gap: 12, padding: 12, height: '100%', overflowY: 'auto', fontSize: '0.875rem', color: 'var(--ui-text-primary)' } },
     notice ? h('div', { role: 'status', style: { display: 'flex', gap: 8, alignItems: 'baseline', ...T.muted } },
       h('span', { style: { flex: 1 } }, notice), h(Button, { size: 'xs', variant: 'ghost', onClick: () => setNotice('') }, 'Dismiss')) : null,
     view.error && study ? h('div', { role: 'status', style: { ...T.faint, fontSize: '0.75rem' } }, 'Reconnecting… showing the last loaded state.') : null,

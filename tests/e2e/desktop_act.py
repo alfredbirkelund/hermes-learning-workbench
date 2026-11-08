@@ -55,6 +55,19 @@ def mouse_click(page, x, y):
         page.call("Input.dispatchMouseEvent", {"type": kind, "x": x, "y": y, "button": "left", "clickCount": 1})
 
 
+def _split_selector(arg):
+    """`<css selector>=<text>`: the first `=` outside [attribute] brackets ends the selector."""
+    depth = 0
+    for i, ch in enumerate(arg):
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+        elif ch == "=" and depth == 0:
+            return arg[:i], arg[i + 1:]
+    raise SystemExit(f"type step needs <selector>=<text>: {arg!r}")
+
+
 def main(steps):
     port = int((ROOT / "desktop-cdp-port").read_text())
     page = open_page(port, timeout=60)
@@ -72,7 +85,7 @@ def main(steps):
                 print(f"clicked {hit}")
                 time.sleep(0.4)
             elif verb == "type":
-                sel, _, text = arg.partition("=")
+                sel, text = _split_selector(arg)
                 hit = page.wait(CLICK_SEL % json.dumps(sel), timeout=20)
                 mouse_click(page, hit["x"], hit["y"])
                 page.insert_text(text.replace("\\n", "\n"))

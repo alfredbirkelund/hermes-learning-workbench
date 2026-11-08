@@ -38,7 +38,7 @@ export HERMES_HOME="${LW_HERMES_HOME:-$LW_TEST_ROOT/hermes-home}"
 export HERMES_DATA_DIR_SUFFIX="-lw-isolated"
 export HERMES_DISABLE_LAZY_INSTALLS=1
 export HERMES_GATEWAY_LOCK_DIR="$LW_TEST_ROOT/gateway-locks/$(basename "$HERMES_HOME")"
-export LW_DESKTOP_USER_DATA="$LW_TEST_ROOT/desktop-user-data"
+export LW_DESKTOP_USER_DATA="${LW_DESKTOP_USER_DATA:-$LW_TEST_ROOT/desktop-user-data}"
 mkdir -p "$HERMES_HOME" "$HERMES_GATEWAY_LOCK_DIR" "$LW_DESKTOP_USER_DATA"
 
 case "$HERMES_HOME" in
