@@ -1,0 +1,79 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: behaviour tests, mutations and pane (Hermes ${{ matrix.hermes }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        hermes: ["v0.23.0"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Fetch Hermes Agent ${{ matrix.hermes }} (the host the tests load the plugin into)
+        run: git clone --quiet --depth 1 --branch "${{ matrix.hermes }}" https://github.com/NousResearch/hermes-agent "$RUNNER_TEMP/hermes-agent"
+
+      - name: Deterministic tests (real plugin loader, tool registry, hooks, slash command, REST router)
+        env:
+          LW_HERMES_RUNTIME: ${{ runner.temp }}/hermes-agent
+        run: scripts/verify.sh
+
+      - name: Mutation check (each invariant's test must fail when the invariant is broken)
+        env:
+          LW_HERMES_RUNTIME: ${{ runner.temp }}/hermes-agent
+        run: scripts/mutation-check.py
+
+      - name: Pane harness (real desktop/plugin.js in React 19 + jsdom against the real backend)
+        env:
+          LW_HERMES_RUNTIME: ${{ runner.temp }}/hermes-agent
+        run: scripts/pane-harness.sh
+
+  catalog-gate:
+    # The admission check the plugin catalog runs on a pinned commit, run here on every push so a
+    # catalog PR never discovers a failure first. Mirrors plugin-catalog-ci.yml in hermes-agent.
+    name: catalog admission gate (hermes plugins validate --install-deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Hermes Agent v0.23.0 (full history, so it can tell its own version)
+        uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: v0.23.0
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Prepare Hermes the way the catalog CI does
+        uses: ./.github/actions/setup-pm
+        with:
+          toolchain: python
+          extras: '[]'
+
+      - name: This plugin at this commit (a clean tree, as the catalog clones it)
+        uses: actions/checkout@v4
+        with:
+          path: _catalog-candidate/learning-workbench
+          persist-credentials: false
+
+      - name: hermes plugins validate --install-deps
+        run: |
+          export HERMES_HOME="$RUNNER_TEMP/hermes-home"
+          mkdir -p "$HERMES_HOME"
+          timeout 600 hermes plugins validate --install-deps "$GITHUB_WORKSPACE/_catalog-candidate/learning-workbench" </dev/null
