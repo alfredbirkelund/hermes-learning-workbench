@@ -11,7 +11,22 @@ export LW_HERMES_HOME="${LW_TEST_ROOT:-$HOME/.hermes/cache/scratch/hackathon-lea
 source "$repo/scripts/testenv.sh"
 out="$repo/.test-artifacts/lifecycle.txt"
 export_dir="$LW_TEST_ROOT/clean-export"
-"$LW_PYTHON" -c 'import shutil, sys; [shutil.rmtree(p, ignore_errors=True) for p in sys.argv[1:]]' "$HERMES_HOME" "$export_dir"
+# Fresh home for every run, except Hermes's downloaded runtime caches (tools/, installs/, cache/): rebuilding them
+# is a multi-minute network download that tests nothing about the plugin.
+"$LW_PYTHON" - "$HERMES_HOME" "$export_dir" <<'PY'
+import shutil, sys
+from pathlib import Path
+home, export = Path(sys.argv[1]), Path(sys.argv[2])
+if home.is_dir():
+    for child in home.iterdir():
+        if child.name in {"tools", "installs", "cache"}:
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+shutil.rmtree(export, ignore_errors=True)
+PY
 mkdir -p "$HERMES_HOME" "$export_dir"
 git -C "$repo" archive "$sha" | tar -x -C "$export_dir"
 H() { "$LW_PYTHON" -m hermes_cli.main "$@" 2>&1 | sed -E 's/\x1b\[[0-9;]*m//g'; return "${PIPESTATUS[0]}"; }
@@ -53,6 +68,8 @@ PY
   echo; echo "## install from git at the pinned SHA"
   H plugins install "file://$repo" --ref "$sha" --enable --yes-deps; check "install exits 0" test $? -eq 0
   H plugins list | grep -E "learning-workbench" ; check "listed as enabled" bash -c "\"$LW_PYTHON\" -m hermes_cli.main plugins list 2>&1 | grep learning-workbench | grep -q enabled"
+  echo; echo "## validate --install-deps (clean export, after the install prepared this home's runtime)"
+  H plugins validate "$export_dir" --install-deps; check "validate --install-deps passes" test $? -eq 0
   echo; echo "## doctor (installed copy)"
   H plugins doctor "$HERMES_HOME/plugins/learning-workbench"; check "doctor passes" test $? -eq 0
   echo; echo "## learner data"

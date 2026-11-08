@@ -14,6 +14,9 @@ fi
 if [[ "${1:-}" == "hermes" ]]; then
   shift
   set -- "$LW_PYTHON" -m hermes_cli.main "$@"
+elif [[ "${1:-}" == "python" ]]; then
+  shift
+  set -- "$LW_PYTHON" "$@"
 fi
 if [[ $model == 1 ]]; then
   exec with-secrets "${LW_MODEL_SECRET:-OPENAI_API_KEY}" -- env HERMES_HOME="$HERMES_HOME" \

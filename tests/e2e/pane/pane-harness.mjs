@@ -229,6 +229,22 @@ await step('when Hermes cannot be asked, the attempt stays saved and the pane sa
   await waitFor(() => q(pane.el, '[data-lw-send="sent"]'), 'sent after ask again')
 })
 
+await step('a Desktop with host.composer sends through the chat composer when idle, else queued prompt.submit', async () => {
+  const composerCalls = []
+  host.composer = { submit: (sid, text) => { composerCalls.push({ sid, text }); return true } }
+  const before = requests.filter(r => r.method === 'prompt.submit').length
+  click(q(pane.el, '[data-lw="ask-again"]'))
+  await waitFor(() => composerCalls.length === 1, 'composer used')
+  assert.equal(composerCalls[0].sid, 'chat-A')
+  assert.match(composerCalls[0].text, /^\[Learning Workbench\] Please check attempt 1 for exercise \d+\./)
+  assert.equal(requests.filter(r => r.method === 'prompt.submit').length, before)
+  host.composer.submit = () => false // no visible composer claims it
+  click(q(pane.el, '[data-lw="ask-again"]'))
+  await waitFor(() => requests.filter(r => r.method === 'prompt.submit').length === before + 1, 'fallback to prompt.submit')
+  assert.equal(lastPrompt().params.queued, true)
+  delete host.composer
+})
+
 await step('route edits from the pane are recorded as the learner’s', async () => {
   const stepEl = await waitFor(() => qa(pane.el, '[data-lw="route"] li')[0], 'route rendered')
   click(byText(stepEl, 'button', 'Skip'))

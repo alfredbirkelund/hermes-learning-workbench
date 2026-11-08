@@ -564,10 +564,22 @@ function Workbench({ ctx }) {
     return () => { stopPoll(); stopEvent() }
   }, [load])
 
-  // Start a normal chat turn with the learner's message, exactly as the composer does. `queued` holds it
-  // until a running turn finishes instead of redirecting that turn.
+  // Start a normal chat turn with the learner's message. On a Desktop with host.composer, an idle chat gets it
+  // through its own composer, exactly as if the learner typed it and pressed Enter. Otherwise (older Desktop, no
+  // visible composer, or a turn still running) it goes through prompt.submit with `queued`, which holds it until
+  // the running turn ends instead of redirecting that turn.
   const sendToTutor = useCallback(text => {
     const target = host.state.focusedSessionId ? host.state.focusedSessionId.get() : runtimeId
+    const stored = host.state.focusedStoredSessionId ? host.state.focusedStoredSessionId.get() : null
+    const busyNow = Boolean(target && ((host.state.busyBySession && host.state.busyBySession.get()) || {})[target])
+    if (!busyNow && host.composer && typeof host.composer.submit === 'function') {
+      let claimed = false
+      try { claimed = host.composer.submit(stored || target, text) === true } catch (_) { claimed = false }
+      if (claimed) {
+        setSendState({ phase: 'sent', message: 'Sent to Hermes.' })
+        return
+      }
+    }
     if (!target) {
       setSendState({ phase: 'unsent', message: 'Saved. Open the chat and send any message so Hermes can check it.' })
       return
