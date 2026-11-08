@@ -84,7 +84,7 @@ PY
   check "previous release wrote schema 1" grep -q '"schema": "1"' <<<"$p"
   echo; echo "## update to the candidate with \`hermes plugins update\`"
   git -C "$src" reset -q --hard "$sha"
-  H plugins update learning-workbench --yes < /dev/null; check "update exits 0" test $? -eq 0
+  H plugins update learning-workbench < /dev/null; check "update exits 0" test $? -eq 0
   installed="$HERMES_HOME/plugins/learning-workbench"
   check "installed copy is the candidate" bash -c "cmp -s '$export_dir/lw/db.py' '$installed/lw/db.py' && cmp -s '$export_dir/plugin.yaml' '$installed/plugin.yaml'"
   p=$(probe read); echo "$p"; check "data intact after update" grep -q '"attempts": \["four"\]' <<<"$p"
