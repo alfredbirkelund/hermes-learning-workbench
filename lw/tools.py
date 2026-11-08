@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Callable, Optional
 
 from . import core, db
@@ -345,7 +346,7 @@ TOOLS = [
 ]
 
 
-def chat_guard_context(open_ex: dict) -> str:
+def chat_guard_context(open_ex: dict, *, recorded: bool = True) -> str:
     """Per-turn note for the agent while the learner's exercise is open (injected into this turn's user message)."""
     prompt = open_ex["prompt"] if len(open_ex["prompt"]) <= 400 else open_ex["prompt"][:400] + "…"
     return (
@@ -353,11 +354,22 @@ def chat_guard_context(open_ex: dict) -> str:
         f"pane, waiting for their own answer:\n«{prompt}»\n"
         "Do not solve it or state its result in chat, even if asked: the answer must stay theirs. Help without "
         "solving it: explain the idea on a different example, ask a guiding question, or point to the pane's hints. "
-        "If they want the full solution, ask them to press “Reveal solution” in the pane, where it is recorded. "
-        "This chat turn is recorded: their next answer to this exercise counts as made after chat help.")
+        "If they want the full solution, ask them to press “Reveal solution” in the pane, where it is recorded."
+        + (" This chat turn is recorded: their next answer to this exercise counts as made after chat help."
+           if recorded else ""))
 
 
-def _on_pre_llm_call(session_id: str = "", **_: Any) -> Optional[dict]:
+# The pane's own fixed messages carry no learner question, so they are not chat help (see desktop/plugin.js).
+# Only an exact match counts: any added text makes it an ordinary chat message.
+_PANE_MESSAGE = re.compile(
+    r"\[Learning Workbench\] (?:"
+    r"I contested your check of attempt \d+ on exercise \d+\. Please look again\."
+    r"|I submitted attempt \d+ for exercise \d+\. Please check it\."
+    r"|Please check attempt \d+ for exercise \d+\."
+    r"|I skipped exercise \d+\.)")
+
+
+def _on_pre_llm_call(session_id: str = "", user_message: Any = None, **_: Any) -> Optional[dict]:
     """Steer and record chat help while an exercise is open. Fires on every turn of every chat: creates nothing
     for people who never study, and never fails the turn."""
     if not session_id:
@@ -367,11 +379,16 @@ def _on_pre_llm_call(session_id: str = "", **_: Any) -> Optional[dict]:
         if not db.store_exists():
             return None
         conn = db.connect()
-        open_ex = core.note_chat_turn(conn, session_id=session_id)
+        from_pane = isinstance(user_message, str) and _PANE_MESSAGE.fullmatch(user_message.strip()) is not None
+        if from_pane:
+            open_ex = core.open_exercise_for_chat(conn, session_id=session_id)
+        else:
+            open_ex = core.note_chat_turn(conn, session_id=session_id)
         if open_ex is None:
             return None
-        broadcast(open_ex["study_id"])
-        return {"context": chat_guard_context(open_ex)}
+        if not from_pane:
+            broadcast(open_ex["study_id"])
+        return {"context": chat_guard_context(open_ex, recorded=not from_pane)}
     except Exception:
         logger.exception("learning-workbench: pre_llm_call failed; this turn is not steered")
         return None

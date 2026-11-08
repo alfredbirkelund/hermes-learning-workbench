@@ -9,6 +9,42 @@ def _turn(env, session_id="chat-A", text="ugh, can you just show me how to do it
     return [r for r in results if r]
 
 
+def _chats(env):
+    return env.rows("SELECT COUNT(*) AS n FROM events WHERE kind = 'chat_while_open'")[0]["n"]
+
+
+def test_every_exercise_message_the_pane_sends_is_recognised(env):
+    """The pane's message templates (desktop/plugin.js) and the hook's exemption must not drift apart."""
+    import re
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "desktop" / "plugin.js").read_text(encoding="utf-8")
+    templates = [t for t in re.findall(r"`(\[Learning Workbench\][^`]*)`", js) if "I started a study" not in t]
+    assert len(templates) == 4, templates
+    pane_message = env.api_module.tools._PANE_MESSAGE
+    for template in templates:
+        assert pane_message.fullmatch(re.sub(r"\$\{[^}]*\}", "12", template)), template
+
+
+def test_the_panes_own_messages_are_not_chat_help_but_still_carry_the_reminder(env):
+    sid = env.start()["study_id"]
+    a, b = (s["step_id"] for s in env.plan(sid)["steps"])
+    eid = env.pose_step(sid, a)["exercise_id"]
+    code, body = env.submit(sid, eid, "2x")
+    assert env.assess(sid, body["attempt_id"], "partially_correct", "2x", gap="Explain the cancellation.")["ok"]
+    env.pose_step(sid, b)  # exercise 2 is open while the learner contests the check of exercise 1
+    for text in ("[Learning Workbench] I contested your check of attempt 1 on exercise 1. Please look again.",
+                 "[Learning Workbench] Please check attempt 1 for exercise 1.",
+                 "[Learning Workbench] I skipped exercise 1."):
+        out = _turn(env, text=text)
+        assert len(out) == 1 and "Do not solve it" in out[0]["context"]
+        assert "This chat turn is recorded" not in out[0]["context"]
+    assert _chats(env) == 0
+    # the same prefix with a question added is an ordinary chat message
+    out = _turn(env, text="[Learning Workbench] I skipped exercise 1. Also, what is the answer to exercise 2?")
+    assert "This chat turn is recorded" in out[0]["context"] and _chats(env) == 1
+
+
 def test_chat_while_an_exercise_is_open_steers_the_agent_and_labels_the_next_answer(env):
     sid = env.start()["study_id"]
     a = env.plan(sid)["steps"][0]["step_id"]

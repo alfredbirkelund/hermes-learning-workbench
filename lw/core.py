@@ -276,8 +276,19 @@ def _open_for_chat(conn, session_id: str) -> Optional[tuple[str, sqlite3.Row]]:
     return (study["id"], ex) if ex is not None else None
 
 
+def _chat_info(study_id: str, ex: sqlite3.Row) -> dict:
+    return {"study_id": study_id, "exercise_id": ex["id"], "sequence": ex["sequence"], "kind": ex["kind"],
+            "prompt": ex["prompt"]}
+
+
+def open_exercise_for_chat(conn, *, session_id: str) -> Optional[dict]:
+    """The exercise in this chat waiting for the learner's own answer, if any (read-only)."""
+    found = _open_for_chat(conn, session_id)
+    return _chat_info(*found) if found else None
+
+
 def note_chat_turn(conn, *, session_id: str) -> Optional[dict]:
-    """A chat turn is starting while this chat's study has an exercise waiting for the learner's own answer.
+    """A learner chat turn is starting while this chat's study has an exercise waiting for their own answer.
 
     Records it, so the next attempt counts as made after chat help (whatever the tutor replies, the plugin cannot
     see it), and returns what the agent must be reminded of this turn. No study revision bump: nothing the agent
@@ -290,8 +301,7 @@ def note_chat_turn(conn, *, session_id: str) -> Optional[dict]:
             return None
         study_id, ex = found
         _event(conn, study_id, "learner", "chat_while_open", ex["id"])
-    return {"study_id": study_id, "exercise_id": ex["id"], "sequence": ex["sequence"], "kind": ex["kind"],
-            "prompt": ex["prompt"]}
+    return _chat_info(study_id, ex)
 
 
 # ---------------------------------------------------------------------------------------------

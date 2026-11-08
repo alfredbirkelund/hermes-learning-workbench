@@ -303,7 +303,10 @@ def learner_action(action: str, *args: str) -> None:
         print("contest:", code, json.dumps(body)[:300])
         log("learner_contest", text=args[0], code=code)
         if code == 200:
-            run_turn(f"[Learning Workbench] I contested your check of attempt {last['number']}. Please look again.")
+            ex_seq = next(e["sequence"] for e in study["exercises"] if any(a["attempt_id"] == last["attempt_id"]
+                                                                            for a in e["attempts"]))
+            run_turn(f"[Learning Workbench] I contested your check of attempt {last['number']} on exercise "
+                     f"{ex_seq}. Please look again.")
         return
     path = {"hint": "hint", "reveal": "reveal", "retry": "retry", "skip": "skip"}[action]
     if ex is None:
