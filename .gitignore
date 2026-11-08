@@ -1,0 +1,11 @@
+.test-artifacts/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.venv/
+dist/
+*.egg-info/
+node_modules/
+.DS_Store
