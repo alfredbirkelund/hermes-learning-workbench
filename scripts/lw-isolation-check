@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Prove the isolated environment resolves only to the test home before anything runs in it.
-# Prints the resolved roots and exits non-zero on any path that points into the real ~/.hermes.
+# Prove the isolated environment resolves only to the test area before anything runs in it.
+# Read-only: imports Hermes modules and prints resolved paths. Exits non-zero (NOT ISOLATED) on any path that
+# leaves $LW_TEST_ROOT, including the real ~/.hermes.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=testenv.sh
-source "$here/testenv.sh"
 runtime="${LW_HERMES_RUNTIME:-$HOME/.hermes/hermes-agent}"
+# Resolve the installed interpreter BEFORE entering the isolated environment (read-only use of the runtime).
 rc="$("$runtime/.hermes/bin/hermes" --print-runtime-command)"
 store_python="$(/usr/bin/python3 -c 'import json,sys; print(json.loads(sys.argv[1])[0])' "$rc")"
 venv_python="$("$store_python" -I -c '
@@ -13,35 +13,50 @@ import sys; from pathlib import Path
 r = Path(sys.argv[1]); sys.path.insert(0, str(r))
 from pm.environments import committed_venv
 e = committed_venv(r); print(e / "bin/python" if e else "")' "$runtime")"
+[[ -x "$venv_python" ]] || { echo "no committed Hermes venv python found" >&2; exit 2; }
+# shellcheck source=testenv.sh
+source "$here/testenv.sh"
+if [[ "${1:-}" == "--negative-control" ]]; then
+  # Same check without the suffix: it must report NOT ISOLATED, proving the check can see the leak.
+  unset HERMES_DATA_DIR_SUFFIX
+fi
 exec "$venv_python" - "$runtime" <<'PY'
 import os, sys
 from pathlib import Path
+sys.modules["hermes_bootstrap"] = None  # a read-only check must never re-exec itself
 sys.path.insert(0, sys.argv[1])
 from hermes_constants import get_default_hermes_root, get_hermes_home
 from hermes_cli import profiles
 from hermes_cli.process_identity import _ledger_path
 from gateway.status import _get_lock_dir
+
+root = Path(os.environ["LW_TEST_ROOT"]).resolve()
 real = (Path.home() / ".hermes").resolve()
 home = Path(os.environ["HERMES_HOME"]).resolve()
+
+
+def inside(p: Path) -> bool:
+    p = p.resolve()
+    return p == root or str(p).startswith(str(root) + os.sep)
+
+
 checks = {
     "HERMES_HOME": get_hermes_home(),
     "default root": get_default_hermes_root(),
     "default profile dir": profiles.get_profile_dir("default"),
-    "machine spawn ledger": _ledger_path().parent,
+    "machine spawn ledger": _ledger_path(),
     "gateway lock dir": _get_lock_dir(),
 }
-served = profiles.profiles_to_serve(True, include_standalone=True, include_parked=True)
 ok = True
 for name, path in checks.items():
-    p = Path(path).resolve()
-    good = (p == home or str(p).startswith(str(home) + os.sep) or
-            str(p).startswith(os.environ["LW_TEST_ROOT"]))
+    good = inside(Path(path))
     ok &= good
-    print(f"{'ok ' if good else 'BAD'} {name}: {p}")
-for name, path in served:
-    good = Path(path).resolve() == home
+    print(f"{'ok ' if good else 'BAD'} {name}: {Path(path).resolve()}")
+for name, path in profiles.profiles_to_serve(True, include_standalone=True, include_parked=True):
+    good = inside(Path(path))
     ok &= good
-    print(f"{'ok ' if good else 'BAD'} served profile {name!r}: {path}")
+    print(f"{'ok ' if good else 'BAD'} served profile {name!r}: {Path(path).resolve()}")
+print(f"(real Hermes root, must not appear above: {real})")
 print("ISOLATED" if ok else "NOT ISOLATED")
 sys.exit(0 if ok else 1)
 PY

@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 # Run one command inside the isolated test environment, e.g.
-#   scripts/lw-env hermes plugins list
-#   scripts/lw-env --model hermes chat -q "hello"   (adds $LW_MODEL_SECRET, default OPENAI_API_KEY, via with-secrets)
+#   scripts/lw-env hermes plugins list             ("hermes" runs the installed interpreter read-only)
+#   scripts/lw-env --model hermes chat -q "hello"  (adds $LW_MODEL_SECRET, default OPENAI_API_KEY, via with-secrets)
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=testenv.sh
 source "$here/testenv.sh"
+model=0
 if [[ "${1:-}" == "--model" ]]; then
+  model=1
   shift
-  exec with-secrets "${LW_MODEL_SECRET:-OPENAI_API_KEY}" -- env HERMES_HOME="$HERMES_HOME" HERMES_GATEWAY_LOCK_DIR="$HERMES_GATEWAY_LOCK_DIR" "$@"
+fi
+if [[ "${1:-}" == "hermes" ]]; then
+  shift
+  set -- "$LW_PYTHON" -m hermes_cli.main "$@"
+fi
+if [[ $model == 1 ]]; then
+  exec with-secrets "${LW_MODEL_SECRET:-OPENAI_API_KEY}" -- env HERMES_HOME="$HERMES_HOME" \
+    HERMES_GATEWAY_LOCK_DIR="$HERMES_GATEWAY_LOCK_DIR" HERMES_DATA_DIR_SUFFIX="$HERMES_DATA_DIR_SUFFIX" \
+    HERMES_DISABLE_LAZY_INSTALLS=1 "$@"
 fi
 exec "$@"

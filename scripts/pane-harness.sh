@@ -11,11 +11,15 @@ if [[ ! -d "$work/node_modules/react-dom" ]]; then
 fi
 cp "$repo/tests/e2e/pane/sdk-stub.mjs" "$repo/tests/e2e/pane/pane-harness.mjs" "$work/"
 sed "s#from '@hermes/plugin-sdk'#from './sdk-stub.mjs'#" "$repo/desktop/plugin.js" > "$work/plugin.mjs"
-home="$(mktemp -d "${TMPDIR:-/tmp}/lw-pane-home.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/lw-pane-home.XXXXXX")"
 log="$work/server.log"
-PYTHONPATH="$runtime" HOME="$home/os-home" python3 "$repo/tests/e2e/pane_server.py" "$home/hermes-home" > "$log" 2>&1 &
+PYTHONPATH="$runtime" HOME="$scratch/os-home" python3 "$repo/tests/e2e/pane_server.py" "$scratch/hermes-home" > "$log" 2>&1 &
 server=$!
-trap 'kill $server 2>/dev/null || true; rm -rf "$home"' EXIT
+cleanup() {
+  kill "$server" 2>/dev/null || true
+  python3 -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$scratch"
+}
+trap cleanup EXIT
 for _ in $(seq 1 100); do grep -q '^PORT ' "$log" && break; sleep 0.1; done
 port="$(sed -n 's/^PORT //p' "$log")"
 [[ -n "$port" ]] || { echo "server did not start"; cat "$log"; exit 1; }
