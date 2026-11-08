@@ -98,8 +98,14 @@ def render(view: dict, *, material_text: str = "", plugin_version: str = "") -> 
                     add(_fence(c["text"]))
                     add("")
                 label = "Check" if s["revision"] == 1 else f"Revised check (revision {s['revision']})"
-                add(f"{label}: **{VERDICT_LABEL.get(s['verdict'], s['verdict'])}**. Quoted: \"{_one_line(s['evidence_quote'])}\". "
-                    f"{_one_line(s['explanation'])}" + (f" Gap: {_one_line(s['gap'])}" if s["gap"] else ""))
+                add(f"{label}: **{VERDICT_LABEL.get(s['verdict'], s['verdict'])}**")
+                add("")
+                add(f"Quoted from the answer: “{_one_line(s['evidence_quote'])}”")
+                add("")
+                add(_one_line(s["explanation"]))
+                if s["gap"]:
+                    add("")
+                    add(f"Gap: {_one_line(s['gap'])}")
                 add("")
             for c in a["contests"]:
                 if not c["answered"]:

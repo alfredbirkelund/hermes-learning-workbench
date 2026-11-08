@@ -295,7 +295,8 @@ def learner_action(action: str, *args: str) -> None:
                      f"{body['exercise_sequence']}. Please check it.")
         return
     if action == "contest":
-        last = next((a for e in reversed(study["exercises"]) for a in reversed(e["attempts"]) if a["assessments"]), None)
+        pool = study["exercises"] if len(args) < 2 else [e for e in study["exercises"] if e["sequence"] == int(args[1])]
+        last = next((a for e in reversed(pool) for a in reversed(e["attempts"]) if a["assessments"]), None)
         if not last:
             raise SystemExit("nothing to contest")
         code, body = http("POST", f"/studies/{sid}/assessments/{last['assessments'][-1]['assessment_id']}/contest",

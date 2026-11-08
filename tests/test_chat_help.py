@@ -70,6 +70,8 @@ def test_chat_while_an_exercise_is_open_steers_the_agent_and_labels_the_next_ans
     assert "after chat help" in _command(env)("")
     code, export = env.api("POST", f"/studies/{sid}/export", {})
     assert "after help in chat while the exercise was open" in export["markdown"]
+    # the quoted words keep their own punctuation; the template adds none after them
+    assert "Check: **correct**\n\nQuoted from the answer: “2x”\n\nChecked against the rubric." in export["markdown"]
 
 
 def test_a_revealed_solution_still_outranks_chat_help(env):
